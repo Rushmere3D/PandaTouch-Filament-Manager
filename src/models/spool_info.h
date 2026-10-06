@@ -12,6 +12,7 @@ struct SpoolInfo
 
     String color_hex;
     String multi_color_hexes;
+    String multi_color_direction;
 
     float remaining_weight = 0.0f;
     float initial_weight = 0.0f;

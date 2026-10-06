@@ -147,6 +147,9 @@ inline bool spoolman_test_spool_list()
         info.multi_color_hexes =
             spool["filament"]["multi_color_hexes"] | "";
 
+        info.multi_color_direction =
+        spool["filament"]["multi_color_direction"] | "";
+
         info.remaining_weight =
             spool["remaining_weight"] | 0.0f;
 
