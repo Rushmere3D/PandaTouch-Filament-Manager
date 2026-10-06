@@ -31,10 +31,8 @@ static lv_obj_t *ui_spool_page_label = nullptr;
 //   RRGGBB
 //   RRGGBBAA
 //
-// Only the first six characters are the RGB colour.
-//
-// The Panda Touch display path swaps red and blue, so we
-// compensate for that here.
+// Panda Touch display path swaps red and blue, so compensate
+// here.
 // ============================================================
 
 inline lv_color_t ui_spool_hex_to_color(const String &hex)
@@ -51,8 +49,6 @@ inline lv_color_t ui_spool_hex_to_color(const String &hex)
         return lv_color_hex(0x808080);
     }
 
-    // Parse only RRGGBB.
-    // Ignore the alpha channel here.
     String rgb_hex =
         clean_hex.substring(0, 6);
 
@@ -68,7 +64,6 @@ inline lv_color_t ui_spool_hex_to_color(const String &hex)
     uint8_t blue =
         value & 0xFF;
 
-    // Compensate for Panda Touch red/blue swap.
     uint32_t panda_color =
         ((uint32_t)blue << 16) |
         ((uint32_t)green << 8) |
@@ -79,14 +74,7 @@ inline lv_color_t ui_spool_hex_to_color(const String &hex)
 
 
 // ============================================================
-// Extract alpha from a Spoolman colour
-//
-// RRGGBB
-//   -> no alpha supplied
-//   -> return 255 (fully opaque)
-//
-// RRGGBBAA
-//   -> return AA
+// Extract alpha from RRGGBBAA
 // ============================================================
 
 inline uint8_t ui_spool_hex_alpha(const String &hex)
@@ -114,20 +102,212 @@ inline uint8_t ui_spool_hex_alpha(const String &hex)
 
 
 // ============================================================
-// Update the four reusable spool rows
+// Extract first two colours from multi_color_hexes
+//
+// Example:
+//   f431e4,9831e7
+// ============================================================
+
+inline bool ui_spool_get_multi_colors(
+    const String &multi,
+    String &colour1,
+    String &colour2)
+{
+    int comma =
+        multi.indexOf(',');
+
+    if (comma < 0)
+    {
+        return false;
+    }
+
+    colour1 =
+        multi.substring(0, comma);
+
+    int second_comma =
+        multi.indexOf(',', comma + 1);
+
+    if (second_comma < 0)
+    {
+        colour2 =
+            multi.substring(comma + 1);
+    }
+    else
+    {
+        colour2 =
+            multi.substring(
+                comma + 1,
+                second_comma);
+    }
+
+    colour1.trim();
+    colour2.trim();
+
+    return (
+        colour1.length() >= 6 &&
+        colour2.length() >= 6);
+}
+
+
+// ============================================================
+// Show normal single-colour swatch
+// ============================================================
+
+inline void ui_spool_show_single_color(
+    size_t row,
+    const String &hex)
+{
+    // IMPORTANT:
+    // Remove any gradient left behind when this reusable row
+    // previously displayed a multicolour spool.
+    lv_obj_set_style_bg_grad_dir(
+        ui_spool_swatches[row],
+        LV_GRAD_DIR_NONE,
+        LV_PART_MAIN);
+
+
+    if (hex.length() >= 6)
+    {
+        lv_obj_set_style_bg_color(
+            ui_spool_swatches[row],
+            ui_spool_hex_to_color(hex),
+            LV_PART_MAIN);
+
+        uint8_t alpha =
+            ui_spool_hex_alpha(hex);
+
+
+        if (alpha < 255)
+        {
+            // Transparent / translucent filament
+            lv_obj_set_style_border_width(
+                ui_spool_swatches[row],
+                3,
+                LV_PART_MAIN);
+
+            lv_obj_set_style_border_color(
+                ui_spool_swatches[row],
+                lv_color_white(),
+                LV_PART_MAIN);
+        }
+        else
+        {
+            // Normal opaque filament
+            lv_obj_set_style_border_width(
+                ui_spool_swatches[row],
+                1,
+                LV_PART_MAIN);
+
+            lv_obj_set_style_border_color(
+                ui_spool_swatches[row],
+                lv_color_hex(0x606870),
+                LV_PART_MAIN);
+        }
+    }
+    else
+    {
+        // Unknown colour
+        lv_obj_set_style_bg_color(
+            ui_spool_swatches[row],
+            lv_color_hex(0x808080),
+            LV_PART_MAIN);
+
+        lv_obj_set_style_border_width(
+            ui_spool_swatches[row],
+            1,
+            LV_PART_MAIN);
+
+        lv_obj_set_style_border_color(
+            ui_spool_swatches[row],
+            lv_color_hex(0x606870),
+            LV_PART_MAIN);
+    }
+}
+
+
+// ============================================================
+// Show two-colour swatch
+//
+// Uses the swatch's own background gradient rather than child
+// objects. Because the swatch itself is circular, the colours
+// stay inside the circle.
+// ============================================================
+
+inline void ui_spool_show_multi_color(
+    size_t row,
+    const String &colour1,
+    const String &colour2)
+{
+    lv_color_t first =
+        ui_spool_hex_to_color(colour1);
+
+    lv_color_t second =
+        ui_spool_hex_to_color(colour2);
+
+
+    // First half colour
+    lv_obj_set_style_bg_color(
+        ui_spool_swatches[row],
+        first,
+        LV_PART_MAIN);
+
+
+    // Second half colour
+    lv_obj_set_style_bg_grad_color(
+        ui_spool_swatches[row],
+        second,
+        LV_PART_MAIN);
+
+
+    // Horizontal: left -> right
+    lv_obj_set_style_bg_grad_dir(
+        ui_spool_swatches[row],
+        LV_GRAD_DIR_HOR,
+        LV_PART_MAIN);
+
+
+    // Keep colour 1 until approximately halfway.
+    lv_obj_set_style_bg_main_stop(
+        ui_spool_swatches[row],
+        127,
+        LV_PART_MAIN);
+
+
+    // Start colour 2 immediately after halfway.
+    //
+    // Keeping these stops adjacent gives us a nearly hard
+    // division rather than a broad blended gradient.
+    lv_obj_set_style_bg_grad_stop(
+        ui_spool_swatches[row],
+        128,
+        LV_PART_MAIN);
+
+
+    lv_obj_set_style_border_width(
+        ui_spool_swatches[row],
+        1,
+        LV_PART_MAIN);
+
+    lv_obj_set_style_border_color(
+        ui_spool_swatches[row],
+        lv_color_hex(0x808890),
+        LV_PART_MAIN);
+}
+
+
+// ============================================================
+// Refresh four reusable rows
 // ============================================================
 
 inline void ui_spools_refresh_rows()
 {
-    for (size_t row = 0; row < SPOOL_ROWS_VISIBLE; row++)
+    for (size_t row = 0;
+         row < SPOOL_ROWS_VISIBLE;
+         row++)
     {
         size_t spool_index =
             ui_spool_first_index + row;
 
-
-        // ----------------------------------------------------
-        // Hide unused rows on the final page
-        // ----------------------------------------------------
 
         if (spool_index >= spool_count)
         {
@@ -152,112 +332,40 @@ inline void ui_spools_refresh_rows()
         // Colour swatch
         // ----------------------------------------------------
 
-        if (spool.color_hex.length() >= 6)
+        String colour1;
+        String colour2;
+
+        if (
+            spool.multi_color_hexes.length() > 0 &&
+            ui_spool_get_multi_colors(
+                spool.multi_color_hexes,
+                colour1,
+                colour2))
         {
-            lv_color_t swatch_color =
-                ui_spool_hex_to_color(
-                    spool.color_hex);
-
-            uint8_t alpha =
-                ui_spool_hex_alpha(
-                    spool.color_hex);
-
-
-            lv_obj_set_style_bg_color(
-                ui_spool_swatches[row],
-                swatch_color,
-                LV_PART_MAIN);
-
-
-            // -----------------------------------------------
-            // Transparent / translucent filament
-            // -----------------------------------------------
-
-            if (alpha < 255)
-            {
-                // Use a thicker white border to distinguish
-                // transparent filament from normal filament.
-                //
-                // We deliberately don't make the LVGL object
-                // itself transparent because clear filament
-                // would become difficult to see against the
-                // dark background.
-
-                lv_obj_set_style_border_width(
-                    ui_spool_swatches[row],
-                    3,
-                    LV_PART_MAIN);
-
-                lv_obj_set_style_border_color(
-                    ui_spool_swatches[row],
-                    lv_color_white(),
-                    LV_PART_MAIN);
-            }
-
-            // -----------------------------------------------
-            // Normal opaque filament
-            // -----------------------------------------------
-
-            else
-            {
-                lv_obj_set_style_border_width(
-                    ui_spool_swatches[row],
-                    1,
-                    LV_PART_MAIN);
-
-                lv_obj_set_style_border_color(
-                    ui_spool_swatches[row],
-                    lv_color_hex(0x606870),
-                    LV_PART_MAIN);
-            }
+            ui_spool_show_multi_color(
+                row,
+                colour1,
+                colour2);
         }
-
-        // ----------------------------------------------------
-        // No normal single colour
-        //
-        // Multicolour support will go here next.
-        // ----------------------------------------------------
-
         else
         {
-            lv_obj_set_style_bg_color(
-                ui_spool_swatches[row],
-                lv_color_hex(0x808080),
-                LV_PART_MAIN);
-
-            lv_obj_set_style_border_width(
-                ui_spool_swatches[row],
-                1,
-                LV_PART_MAIN);
-
-            lv_obj_set_style_border_color(
-                ui_spool_swatches[row],
-                lv_color_hex(0x606870),
-                LV_PART_MAIN);
+            ui_spool_show_single_color(
+                row,
+                spool.color_hex);
         }
 
 
         // ----------------------------------------------------
-        // Vendor
+        // Text
         // ----------------------------------------------------
 
         lv_label_set_text(
             ui_spool_vendors[row],
             spool.vendor.c_str());
 
-
-        // ----------------------------------------------------
-        // Material
-        // ----------------------------------------------------
-
         lv_label_set_text(
             ui_spool_materials[row],
             spool.material.c_str());
-
-
-        // ----------------------------------------------------
-        // Filament name
-        // ----------------------------------------------------
 
         lv_label_set_text(
             ui_spool_names[row],
@@ -283,7 +391,7 @@ inline void ui_spools_refresh_rows()
 
 
     // ========================================================
-    // Page information
+    // Page indicator
     // ========================================================
 
     if (ui_spool_page_label != nullptr)
@@ -328,7 +436,7 @@ inline void ui_spools_refresh_rows()
 
 
 // ============================================================
-// Previous page button
+// Previous page
 // ============================================================
 
 inline void ui_spools_previous_cb(lv_event_t *e)
@@ -348,13 +456,14 @@ inline void ui_spools_previous_cb(lv_event_t *e)
 
 
 // ============================================================
-// Next page button
+// Next page
 // ============================================================
 
 inline void ui_spools_next_cb(lv_event_t *e)
 {
-    if (ui_spool_first_index +
-            SPOOL_ROWS_VISIBLE <
+    if (
+        ui_spool_first_index +
+        SPOOL_ROWS_VISIBLE <
         spool_count)
     {
         ui_spool_first_index +=
@@ -404,7 +513,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     // ========================================================
-    // Page position label
+    // Page position
     // ========================================================
 
     ui_spool_page_label =
@@ -423,7 +532,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     // ========================================================
-    // Spool list area
+    // List area
     // ========================================================
 
     lv_obj_t *list =
@@ -470,7 +579,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     // ========================================================
-    // Create four reusable physical rows
+    // Create four reusable rows
     // ========================================================
 
     for (size_t row = 0;
@@ -536,6 +645,11 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
             0,
             0);
 
+        lv_obj_set_style_pad_all(
+            ui_spool_swatches[row],
+            0,
+            LV_PART_MAIN);
+
         lv_obj_set_style_border_width(
             ui_spool_swatches[row],
             1,
@@ -548,7 +662,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
         lv_obj_set_style_radius(
             ui_spool_swatches[row],
-            15,
+            LV_RADIUS_CIRCLE,
             LV_PART_MAIN);
 
         lv_obj_clear_flag(
@@ -671,7 +785,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     // ========================================================
-    // Previous button
+    // Previous
     // ========================================================
 
     lv_obj_t *previous_button =
@@ -694,7 +808,6 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
         LV_EVENT_CLICKED,
         nullptr);
 
-
     lv_obj_t *previous_label =
         lv_label_create(previous_button);
 
@@ -702,12 +815,11 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
         previous_label,
         "< PREV");
 
-    lv_obj_center(
-        previous_label);
+    lv_obj_center(previous_label);
 
 
     // ========================================================
-    // Next button
+    // Next
     // ========================================================
 
     lv_obj_t *next_button =
@@ -730,7 +842,6 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
         LV_EVENT_CLICKED,
         nullptr);
 
-
     lv_obj_t *next_label =
         lv_label_create(next_button);
 
@@ -738,8 +849,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
         next_label,
         "NEXT >");
 
-    lv_obj_center(
-        next_label);
+    lv_obj_center(next_label);
 
 
     // ========================================================

@@ -201,6 +201,12 @@ inline bool spoolman_test_spool_list()
 
         Serial.print("Colour: ");
 
+        Serial.print("Multi colours: ");
+        Serial.println(info.multi_color_hexes);
+
+        Serial.print("Multi direction: ");
+        Serial.println(info.multi_color_direction);
+
         if (info.color_hex.length() > 0)
         {
             Serial.print("#");
