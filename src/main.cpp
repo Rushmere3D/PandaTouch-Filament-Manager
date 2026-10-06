@@ -1,6 +1,7 @@
 #include "pt/pt_display.h"
 #include "ui_main.h"
 #include "network/wifi_manager.h"
+#include "network/spoolman_client.h"
 
 void setup()
 {
@@ -12,8 +13,10 @@ void setup()
     // Connect Panda Touch to Wi-Fi
     wifi_connect();
 
+    // Test communication with the Spoolman server
+    spoolman_test_connection();
+
     // Create our Filament Manager interface
-    // after Wi-Fi connection information is available
     ui_create_main();
 }
 
