@@ -4,27 +4,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "secrets.h"
-
-
-struct SpoolInfo
-{
-    int id;
-
-    String vendor;
-    String name;
-    String material;
-
-    String color_hex;
-    String multi_color_hexes;
-
-    float remaining_weight;
-    float initial_weight;
-    float spool_weight;
-
-    String location;
-
-    bool archived;
-};
+#include "../models/spool_store.h"
 
 
 inline bool spoolman_test_connection()
@@ -131,6 +111,8 @@ inline bool spoolman_test_spool_list()
         return false;
     }
 
+    spool_store_clear();
+    
     JsonArray spools =
         doc.as<JsonArray>();
 
@@ -180,7 +162,14 @@ inline bool spoolman_test_spool_list()
         info.archived =
             spool["archived"] | false;
 
-
+        // Save this spool for the application
+        if (!spool_store_add(info))
+        {
+            Serial.println("WARNING: Spool store is full!");
+            break;
+        }
+        
+        // Print it for debugging
         Serial.println();
 
         Serial.print("Spool ID: ");
@@ -232,6 +221,10 @@ inline bool spoolman_test_spool_list()
 
         Serial.println("------------------------------");
     }
+
+    Serial.println();
+    Serial.print("Spools stored in memory: ");
+    Serial.println(spool_count);
 
     http.end();
 
