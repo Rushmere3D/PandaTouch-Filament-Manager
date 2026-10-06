@@ -4,8 +4,8 @@
 
 constexpr size_t MAX_SPOOLS = 100;
 
-inline SpoolInfo spool_store[MAX_SPOOLS];
-inline size_t spool_count = 0;
+static SpoolInfo spool_store[MAX_SPOOLS];
+static size_t spool_count = 0;
 
 inline void spool_store_clear()
 {
