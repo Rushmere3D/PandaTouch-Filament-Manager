@@ -13,8 +13,8 @@ void setup()
     // Connect Panda Touch to Wi-Fi
     wifi_connect();
 
-    // Test communication with the Spoolman server
-    spoolman_test_connection();
+    // Retrieve the real spool list from Spoolman
+    spoolman_test_spool_list();
 
     // Create our Filament Manager interface
     ui_create_main();
