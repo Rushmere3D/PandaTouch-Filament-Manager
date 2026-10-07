@@ -10,6 +10,14 @@ constexpr size_t SPOOL_ROWS_VISIBLE = 4;
 static size_t ui_spool_first_index = 0;
 static size_t ui_spool_selected_index = 0;
 
+typedef void (*UiSpoolUseOnScaleCallback)(size_t spool_index);
+static UiSpoolUseOnScaleCallback ui_spool_use_on_scale_callback = nullptr;
+
+inline void ui_spools_set_use_on_scale_callback(UiSpoolUseOnScaleCallback callback)
+{
+    ui_spool_use_on_scale_callback = callback;
+}
+
 static lv_obj_t *ui_spool_list_view = nullptr;
 static lv_obj_t *ui_spool_detail_view = nullptr;
 static lv_obj_t *ui_spool_page_label = nullptr;
@@ -345,6 +353,18 @@ inline void ui_spools_last_cb(lv_event_t *e)
     ui_spools_refresh_rows();
 }
 
+inline void ui_spool_use_on_scale_cb(lv_event_t *e)
+{
+    (void)e;
+
+    if (ui_spool_selected_index >= spool_count) return;
+
+    ui_spool_show_list_view();
+
+    if (ui_spool_use_on_scale_callback != nullptr)
+        ui_spool_use_on_scale_callback(ui_spool_selected_index);
+}
+
 inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 {
     lv_obj_t *page = lv_obj_create(parent);
@@ -510,6 +530,15 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
     lv_obj_t *back_label = lv_label_create(back_button);
     lv_label_set_text(back_label, "< BACK");
     lv_obj_center(back_label);
+
+    lv_obj_t *use_scale_button = lv_button_create(ui_spool_detail_view);
+    lv_obj_set_size(use_scale_button, 180, 42);
+    lv_obj_align(use_scale_button, LV_ALIGN_BOTTOM_RIGHT, -10, 0);
+    lv_obj_add_event_cb(use_scale_button, ui_spool_use_on_scale_cb, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t *use_scale_label = lv_label_create(use_scale_button);
+    lv_label_set_text(use_scale_label, "USE ON SCALE");
+    lv_obj_center(use_scale_label);
 
     lv_obj_add_flag(ui_spool_detail_view, LV_OBJ_FLAG_HIDDEN);
 
