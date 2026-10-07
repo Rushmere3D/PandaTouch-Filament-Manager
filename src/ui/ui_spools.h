@@ -13,8 +13,10 @@ static size_t ui_spool_selected_index = 0;
 static lv_obj_t *ui_spool_list_view = nullptr;
 static lv_obj_t *ui_spool_detail_view = nullptr;
 static lv_obj_t *ui_spool_page_label = nullptr;
+static lv_obj_t *ui_spool_first_button = nullptr;
 static lv_obj_t *ui_spool_previous_button = nullptr;
 static lv_obj_t *ui_spool_next_button = nullptr;
+static lv_obj_t *ui_spool_last_button = nullptr;
 
 static lv_obj_t *ui_spool_rows[SPOOL_ROWS_VISIBLE];
 static lv_obj_t *ui_spool_swatches[SPOOL_ROWS_VISIBLE];
@@ -149,6 +151,38 @@ inline lv_obj_t *ui_spool_create_caption(lv_obj_t *parent, const char *text, int
     return label;
 }
 
+inline void ui_spools_update_nav_buttons()
+{
+    bool at_first = (ui_spool_first_index == 0);
+    bool at_last =
+        (spool_count == 0) ||
+        (ui_spool_first_index + SPOOL_ROWS_VISIBLE >= spool_count);
+
+    if (ui_spool_first_button != nullptr)
+    {
+        if (at_first) lv_obj_add_state(ui_spool_first_button, LV_STATE_DISABLED);
+        else lv_obj_remove_state(ui_spool_first_button, LV_STATE_DISABLED);
+    }
+
+    if (ui_spool_previous_button != nullptr)
+    {
+        if (at_first) lv_obj_add_state(ui_spool_previous_button, LV_STATE_DISABLED);
+        else lv_obj_remove_state(ui_spool_previous_button, LV_STATE_DISABLED);
+    }
+
+    if (ui_spool_next_button != nullptr)
+    {
+        if (at_last) lv_obj_add_state(ui_spool_next_button, LV_STATE_DISABLED);
+        else lv_obj_remove_state(ui_spool_next_button, LV_STATE_DISABLED);
+    }
+
+    if (ui_spool_last_button != nullptr)
+    {
+        if (at_last) lv_obj_add_state(ui_spool_last_button, LV_STATE_DISABLED);
+        else lv_obj_remove_state(ui_spool_last_button, LV_STATE_DISABLED);
+    }
+}
+
 inline void ui_spools_refresh_rows()
 {
     for (size_t row = 0; row < SPOOL_ROWS_VISIBLE; row++)
@@ -197,6 +231,8 @@ inline void ui_spools_refresh_rows()
 
         lv_label_set_text(ui_spool_page_label, page_text);
     }
+
+    ui_spools_update_nav_buttons();
 }
 
 inline void ui_spool_refresh_detail()
@@ -233,8 +269,10 @@ inline void ui_spool_show_list_view()
     lv_obj_add_flag(ui_spool_detail_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ui_spool_list_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ui_spool_page_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(ui_spool_first_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ui_spool_previous_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ui_spool_next_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(ui_spool_last_button, LV_OBJ_FLAG_HIDDEN);
 }
 
 inline void ui_spool_show_detail_view(size_t spool_index)
@@ -246,8 +284,10 @@ inline void ui_spool_show_detail_view(size_t spool_index)
 
     lv_obj_add_flag(ui_spool_list_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(ui_spool_page_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_spool_first_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(ui_spool_previous_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(ui_spool_next_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_spool_last_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ui_spool_detail_view, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -262,6 +302,13 @@ inline void ui_spool_back_cb(lv_event_t *e)
 {
     (void)e;
     ui_spool_show_list_view();
+}
+
+inline void ui_spools_first_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_spool_first_index = 0;
+    ui_spools_refresh_rows();
 }
 
 inline void ui_spools_previous_cb(lv_event_t *e)
@@ -283,6 +330,19 @@ inline void ui_spools_next_cb(lv_event_t *e)
         ui_spool_first_index += SPOOL_ROWS_VISIBLE;
         ui_spools_refresh_rows();
     }
+}
+
+inline void ui_spools_last_cb(lv_event_t *e)
+{
+    (void)e;
+
+    if (spool_count == 0)
+        ui_spool_first_index = 0;
+    else
+        ui_spool_first_index =
+            ((spool_count - 1) / SPOOL_ROWS_VISIBLE) * SPOOL_ROWS_VISIBLE;
+
+    ui_spools_refresh_rows();
 }
 
 inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
@@ -361,21 +421,42 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
         lv_obj_align(ui_spool_weights[row], LV_ALIGN_RIGHT_MID, -5, 0);
     }
 
+    // --------------------------------------------------------
+    // FOUR-BUTTON PAGE NAVIGATION
+    // --------------------------------------------------------
+
+    ui_spool_first_button = lv_button_create(page);
+    lv_obj_set_size(ui_spool_first_button, 150, 42);
+    lv_obj_align(ui_spool_first_button, LV_ALIGN_BOTTOM_LEFT, 10, 0);
+    lv_obj_add_event_cb(ui_spool_first_button, ui_spools_first_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t *first_label = lv_label_create(ui_spool_first_button);
+    lv_label_set_text(first_label, "|< FIRST");
+    lv_obj_center(first_label);
+
     ui_spool_previous_button = lv_button_create(page);
-    lv_obj_set_size(ui_spool_previous_button, 130, 42);
-    lv_obj_align(ui_spool_previous_button, LV_ALIGN_BOTTOM_LEFT, 10, 0);
+    lv_obj_set_size(ui_spool_previous_button, 150, 42);
+    lv_obj_align(ui_spool_previous_button, LV_ALIGN_BOTTOM_LEFT, 200, 0);
     lv_obj_add_event_cb(ui_spool_previous_button, ui_spools_previous_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t *previous_label = lv_label_create(ui_spool_previous_button);
     lv_label_set_text(previous_label, "< PREV");
     lv_obj_center(previous_label);
 
     ui_spool_next_button = lv_button_create(page);
-    lv_obj_set_size(ui_spool_next_button, 130, 42);
-    lv_obj_align(ui_spool_next_button, LV_ALIGN_BOTTOM_RIGHT, -10, 0);
+    lv_obj_set_size(ui_spool_next_button, 150, 42);
+    lv_obj_align(ui_spool_next_button, LV_ALIGN_BOTTOM_RIGHT, -200, 0);
     lv_obj_add_event_cb(ui_spool_next_button, ui_spools_next_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t *next_label = lv_label_create(ui_spool_next_button);
     lv_label_set_text(next_label, "NEXT >");
     lv_obj_center(next_label);
+
+    ui_spool_last_button = lv_button_create(page);
+    lv_obj_set_size(ui_spool_last_button, 150, 42);
+    lv_obj_align(ui_spool_last_button, LV_ALIGN_BOTTOM_RIGHT, -10, 0);
+    lv_obj_add_event_cb(ui_spool_last_button, ui_spools_last_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t *last_label = lv_label_create(ui_spool_last_button);
+    lv_label_set_text(last_label, "LAST >|");
+    lv_obj_center(last_label);
+
 
     // --------------------------------------------------------
     // DETAIL VIEW
