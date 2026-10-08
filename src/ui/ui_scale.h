@@ -132,11 +132,26 @@ inline lv_obj_t *ui_scale_create(lv_obj_t *parent)
     ui_scale_tare_button = lv_button_create(page);
     lv_obj_set_size(ui_scale_tare_button, 180, 42);
     lv_obj_align(ui_scale_tare_button, LV_ALIGN_BOTTOM_RIGHT, -20, 0);
-    lv_obj_add_state(ui_scale_tare_button, LV_STATE_DISABLED);
+
+    // Explicit state styles override LVGL's default orange button theme.
+    lv_obj_set_style_bg_color(ui_scale_tare_button, lv_color_hex(0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(ui_scale_tare_button, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(ui_scale_tare_button, lv_color_hex(0x252D34), LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_set_style_bg_opa(ui_scale_tare_button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(ui_scale_tare_button, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_set_style_text_color(ui_scale_tare_button, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(ui_scale_tare_button, lv_color_hex(0x7D8993), LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_set_style_shadow_width(ui_scale_tare_button, 0, LV_PART_MAIN);
 
     lv_obj_t *tare_label = lv_label_create(ui_scale_tare_button);
     lv_label_set_text(tare_label, "TARE");
     lv_obj_center(tare_label);
+    lv_obj_set_style_text_color(tare_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(tare_label, lv_color_hex(0x7D8993), LV_PART_MAIN | LV_STATE_DISABLED);
+
+    // Keep TARE disabled until the scale controller is connected.
+    lv_obj_add_state(ui_scale_tare_button, LV_STATE_DISABLED);
+    lv_obj_add_state(tare_label, LV_STATE_DISABLED);
 
     ui_scale_refresh_selected_spool();
 

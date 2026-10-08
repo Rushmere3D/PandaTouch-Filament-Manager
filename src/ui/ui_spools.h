@@ -266,6 +266,21 @@ inline lv_obj_t *ui_spool_create_caption(lv_obj_t *parent, const char *text, int
 
 
 
+// Shared neutral button palette for the Spools page.
+inline void ui_spool_style_button(lv_obj_t *button)
+{
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x252D34), LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_set_style_text_color(button, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_text_color(button, lv_color_hex(0x7D8993), LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(button, 7, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DISABLED);
+}
+
 inline void ui_spools_update_nav_buttons()
 
 {
@@ -842,6 +857,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     ui_spool_first_button = lv_button_create(page);
+    ui_spool_style_button(ui_spool_first_button);
 
     lv_obj_set_size(ui_spool_first_button, 150, 42);
 
@@ -858,6 +874,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     ui_spool_previous_button = lv_button_create(page);
+    ui_spool_style_button(ui_spool_previous_button);
 
     lv_obj_set_size(ui_spool_previous_button, 150, 42);
 
@@ -874,6 +891,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     ui_spool_next_button = lv_button_create(page);
+    ui_spool_style_button(ui_spool_next_button);
 
     lv_obj_set_size(ui_spool_next_button, 150, 42);
 
@@ -890,6 +908,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     ui_spool_last_button = lv_button_create(page);
+    ui_spool_style_button(ui_spool_last_button);
 
     lv_obj_set_size(ui_spool_last_button, 150, 42);
 
@@ -999,6 +1018,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     lv_obj_t *back_button = lv_button_create(ui_spool_detail_view);
+    ui_spool_style_button(back_button);
 
     lv_obj_set_size(back_button, 130, 42);
 
@@ -1015,6 +1035,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
 
     lv_obj_t *use_scale_button = lv_button_create(ui_spool_detail_view);
+    ui_spool_style_button(use_scale_button);
 
     lv_obj_set_size(use_scale_button, 180, 42);
 

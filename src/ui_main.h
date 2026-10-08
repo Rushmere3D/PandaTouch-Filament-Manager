@@ -21,11 +21,22 @@ enum UiPage
     UI_PAGE_SETTINGS
 };
 
+// Keep LVGL button geometry and flex behaviour intact; override colours only.
+static void ui_style_nav_button(lv_obj_t *button)
+{
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_grad_dir(button, LV_GRAD_DIR_NONE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_text_color(button, lv_color_white(), LV_PART_MAIN);
+}
+
 static void ui_update_nav_buttons(UiPage active_page)
 {
-    lv_obj_set_style_bg_color(ui_nav_spools, lv_color_hex(0x303840), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(ui_nav_scale, lv_color_hex(0x303840), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(ui_nav_settings, lv_color_hex(0x303840), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(ui_nav_spools, lv_color_hex(0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(ui_nav_scale, lv_color_hex(0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(ui_nav_settings, lv_color_hex(0x394650), LV_PART_MAIN);
 
     lv_obj_t *active_button = nullptr;
 
@@ -37,7 +48,7 @@ static void ui_update_nav_buttons(UiPage active_page)
     }
 
     if (active_button != nullptr)
-        lv_obj_set_style_bg_color(active_button, lv_color_hex(0x1976D2), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(active_button, lv_color_hex(0xD27619), LV_PART_MAIN);
 }
 
 static void ui_show_page(UiPage page)
@@ -78,6 +89,7 @@ static lv_obj_t *ui_create_nav_button(lv_obj_t *parent, const char *text, UiPage
 {
     lv_obj_t *button = lv_button_create(parent);
     lv_obj_set_size(button, 200, 70);
+    ui_style_nav_button(button);
 
     lv_obj_add_event_cb(
         button,
@@ -87,6 +99,7 @@ static lv_obj_t *ui_create_nav_button(lv_obj_t *parent, const char *text, UiPage
 
     lv_obj_t *label = lv_label_create(button);
     lv_label_set_text(label, text);
+    lv_obj_set_style_text_color(label, lv_color_white(), LV_PART_MAIN);
     lv_obj_center(label);
 
     return button;
@@ -121,6 +134,10 @@ inline void ui_create_main()
 
     lv_obj_t *nav = lv_obj_create(screen);
     lv_obj_set_size(nav, 760, 90);
+    // This is a layout container, not a giant background button.
+    lv_obj_set_style_bg_opa(nav, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(nav, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(nav, 0, LV_PART_MAIN);
     lv_obj_align(nav, LV_ALIGN_BOTTOM_MID, 0, -5);
     lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(
