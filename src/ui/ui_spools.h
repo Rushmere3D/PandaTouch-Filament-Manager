@@ -13,13 +13,18 @@ constexpr size_t SPOOL_ROWS_VISIBLE = 4;
 static size_t ui_spool_first_index = 0;
 
 static size_t ui_spool_selected_index = 0;
-static size_t ui_spool_filtered_indices[MAX_SPOOLS];
-static size_t ui_spool_filtered_count = 0;
-static size_t ui_spool_indexed_source_count = (size_t)-1;
-static lv_obj_t *ui_spool_search_input = nullptr;
-static lv_obj_t *ui_spool_search_keyboard = nullptr;
-static lv_obj_t *ui_spool_search_clear = nullptr;
 
+static size_t ui_spool_filtered_indices[MAX_SPOOLS];
+
+static size_t ui_spool_filtered_count = 0;
+
+static size_t ui_spool_indexed_source_count = (size_t)-1;
+
+static lv_obj_t *ui_spool_search_input = nullptr;
+
+static lv_obj_t *ui_spool_search_keyboard = nullptr;
+
+static lv_obj_t *ui_spool_search_clear = nullptr;
 
 typedef void (*UiSpoolUseOnScaleCallback)(size_t spool_index);
 
@@ -346,71 +351,125 @@ inline void ui_spool_style_button(lv_obj_t *button)
 inline void ui_spools_refresh_rows();
 
 inline void ui_spools_rebuild_filter()
+
 {
+
     ui_spool_indexed_source_count = spool_count;
+
     ui_spool_filtered_count = 0;
+
     String query = ui_spool_search_input ? String(lv_textarea_get_text(ui_spool_search_input)) : String("");
+
     query.trim();
+
     query.toLowerCase();
 
     for (size_t i = 0; i < spool_count && i < MAX_SPOOLS; i++)
+
     {
+
         const SpoolInfo &spool = spool_store[i];
+
         String id = String(spool.id);
+
         String vendor = spool.vendor; vendor.toLowerCase();
+
         String name = spool.name; name.toLowerCase();
+
         String material = spool.material; material.toLowerCase();
+
         if (query.isEmpty() || vendor.indexOf(query) >= 0 ||
+
             name.indexOf(query) >= 0 || material.indexOf(query) >= 0 ||
+
             id.indexOf(query) >= 0)
+
             ui_spool_filtered_indices[ui_spool_filtered_count++] = i;
+
     }
+
     ui_spool_first_index = 0;
+
     ui_spools_refresh_rows();
+
 }
 
 inline void ui_spools_search_changed_cb(lv_event_t *e)
+
 {
+
     (void)e;
+
     ui_spools_rebuild_filter();
+
 }
 
 inline void ui_spools_search_close_keyboard()
+
 {
+
     if (ui_spool_search_keyboard != nullptr)
+
     {
+
         lv_obj_delete(ui_spool_search_keyboard);
+
         ui_spool_search_keyboard = nullptr;
+
     }
+
     if (ui_spool_search_input != nullptr)
+
         lv_obj_remove_state(ui_spool_search_input, LV_STATE_FOCUSED);
+
 }
 
 inline void ui_spools_keyboard_done_cb(lv_event_t *e)
+
 {
+
     (void)e;
+
     ui_spools_search_close_keyboard();
+
 }
 
 inline void ui_spools_search_focus_cb(lv_event_t *e)
+
 {
+
     (void)e;
+
     if (ui_spool_search_keyboard != nullptr) return;
+
     ui_spool_search_keyboard = lv_keyboard_create(lv_screen_active());
+
     lv_obj_set_size(ui_spool_search_keyboard, LV_PCT(100), 215);
+
     lv_obj_align(ui_spool_search_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+
     lv_keyboard_set_textarea(ui_spool_search_keyboard, ui_spool_search_input);
+
     lv_obj_add_event_cb(ui_spool_search_keyboard, ui_spools_keyboard_done_cb, LV_EVENT_READY, nullptr);
+
     lv_obj_add_event_cb(ui_spool_search_keyboard, ui_spools_keyboard_done_cb, LV_EVENT_CANCEL, nullptr);
+
     lv_obj_move_foreground(ui_spool_search_keyboard);
+
 }
 
 inline void ui_spools_search_clear_cb(lv_event_t *e)
+
 {
+
     (void)e;
+
     lv_textarea_set_text(ui_spool_search_input, "");
+
     ui_spools_search_close_keyboard();
+
     ui_spools_rebuild_filter();
+
 }
 
 inline void ui_spools_update_nav_buttons()
@@ -470,11 +529,17 @@ inline void ui_spools_update_nav_buttons()
 inline void ui_spools_refresh_rows()
 
 {
+
     // Inventory is fetched asynchronously. Reindex when the source count changes.
+
     if (ui_spool_indexed_source_count != spool_count)
+
     {
+
         ui_spools_rebuild_filter();
+
         return;
+
     }
 
     for (size_t row = 0; row < SPOOL_ROWS_VISIBLE; row++)
@@ -482,6 +547,7 @@ inline void ui_spools_refresh_rows()
     {
 
         size_t result_index = ui_spool_first_index + row;
+
         size_t spool_index = result_index < ui_spool_filtered_count ? ui_spool_filtered_indices[result_index] : spool_count;
 
         if (spool_index >= spool_count)
@@ -609,6 +675,8 @@ inline void ui_spool_show_list_view()
     lv_obj_add_flag(ui_spool_detail_view, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_remove_flag(ui_spool_list_view, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(ui_spool_search_input, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(ui_spool_search_clear, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_remove_flag(ui_spool_page_label, LV_OBJ_FLAG_HIDDEN);
 
@@ -628,11 +696,14 @@ inline void ui_spool_show_detail_view(size_t spool_index)
 
     if (spool_index >= spool_count) return;
 
+    ui_spools_search_close_keyboard();
     ui_spool_selected_index = spool_index;
 
     ui_spool_refresh_detail();
 
     lv_obj_add_flag(ui_spool_list_view, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_spool_search_input, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_spool_search_clear, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_flag(ui_spool_page_label, LV_OBJ_FLAG_HIDDEN);
 
@@ -655,6 +726,7 @@ inline void ui_spool_row_clicked_cb(lv_event_t *e)
     size_t row = (size_t)(uintptr_t)lv_event_get_user_data(e);
 
     size_t result_index = ui_spool_first_index + row;
+
         size_t spool_index = result_index < ui_spool_filtered_count ? ui_spool_filtered_indices[result_index] : spool_count;
 
     if (spool_index < spool_count) ui_spool_show_detail_view(spool_index);
@@ -784,26 +856,45 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
     // --------------------------------------------------------
 
     ui_spool_search_input = lv_textarea_create(page);
+
     lv_obj_set_size(ui_spool_search_input, 535, 30);
+
     lv_obj_align(ui_spool_search_input, LV_ALIGN_TOP_LEFT, 8, -5);
+
     lv_textarea_set_one_line(ui_spool_search_input, true);
+
     lv_textarea_set_placeholder_text(ui_spool_search_input, "Search spools...");
+
     lv_obj_set_style_bg_color(ui_spool_search_input, lv_color_hex(0x26313A), LV_PART_MAIN);
+
     lv_obj_set_style_text_color(ui_spool_search_input, lv_color_white(), LV_PART_MAIN);
+
     lv_obj_set_style_border_width(ui_spool_search_input, 0, LV_PART_MAIN);
+
     lv_obj_set_style_radius(ui_spool_search_input, 5, LV_PART_MAIN);
+
     lv_obj_set_style_pad_top(ui_spool_search_input, 4, LV_PART_MAIN);
+
     lv_obj_set_style_pad_bottom(ui_spool_search_input, 3, LV_PART_MAIN);
+
     lv_obj_add_event_cb(ui_spool_search_input, ui_spools_search_focus_cb, LV_EVENT_CLICKED, nullptr);
+
     lv_obj_add_event_cb(ui_spool_search_input, ui_spools_search_changed_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     ui_spool_search_clear = lv_button_create(page);
+
     ui_spool_style_button(ui_spool_search_clear);
+
     lv_obj_set_size(ui_spool_search_clear, 45, 30);
+
     lv_obj_align(ui_spool_search_clear, LV_ALIGN_TOP_LEFT, 550, -5);
+
     lv_obj_add_event_cb(ui_spool_search_clear, ui_spools_search_clear_cb, LV_EVENT_CLICKED, nullptr);
+
     lv_obj_t *clear_label = lv_label_create(ui_spool_search_clear);
+
     lv_label_set_text(clear_label, "X");
+
     lv_obj_center(clear_label);
 
     ui_spool_list_view = lv_obj_create(page);
