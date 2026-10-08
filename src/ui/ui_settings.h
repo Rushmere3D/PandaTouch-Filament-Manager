@@ -144,7 +144,7 @@ inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
     lv_obj_set_style_border_width(timeout_dropdown, 0, LV_PART_MAIN);
 
     uint16_t timeout_minutes = pt_screen_get_dim_timeout_minutes();
-    uint16_t timeout_selection = 2;
+    uint16_t timeout_selection = 2; // default to 5 minutes
     if (timeout_minutes == 1) timeout_selection = 0;
     else if (timeout_minutes == 2) timeout_selection = 1;
     else if (timeout_minutes == 5) timeout_selection = 2;
