@@ -1,395 +1,173 @@
-# PandaTouch Arduino Template
+# PandaTouch Filament Manager
 
-A ready-to-use **PlatformIO project** for the [PandaTouch](https://bttwiki.com/PandaTouch.html) (ESP32-S3).  
-It brings up the **800×480 RGB LCD**, **GT911 touch controller**, and **LVGL v9.3** — so you can start building GUIs right away.
+Custom touchscreen firmware for the **BIGTREETECH Panda Touch V1.0**, designed to manage 3D-printing filament inventory through [Spoolman](https://github.com/Donkie/Spoolman), with a filament-weighing scale planned for a future release.
 
-<img src="docs/images/pandatouch.png" width="256" style="padding:64px; background-color:#fff; border-radius:8px;">
+> **Project status: Work in progress.** The Spoolman inventory interface is running on Panda Touch hardware. The physical scale and automatic weight updates are **not implemented yet**.
 
-> **Important: tearing / display glitches warning**
->
-> Building with the Arduino framework via PlatformIO works well for most users, but some display tearing, flicker or other timing-related artifacts can still occur on the RGB parallel LCD. These issues are commonly caused by low-level PSRAM/flash timing and memory configuration values that the Arduino core doesn't expose or allow you to tweak. The ESP-IDF gives direct control over these critical timings and is the most reliable way to achieve deterministic, tear-free behavior.
->
-> If you need a more deterministic solution, use the IDF-based PandaTouch component at: https://github.com/bigtreetech/PandaTouch_IDF
->
-> The `pandatouch-arduino-3x` environment (Arduino core 3.x) may mitigate some timing problems because it bundles newer SDK libs, but it does not always fully eliminate tearing — IDF is preferred for hard real-time/timing-sensitive scenarios.
+## Features
 
-## Table of contents
+### Working on hardware
 
-- [What’s inside](#whats-inside)
-- [Quick start](#quick-start)
-- [Using the template](#using-the-template)
-- [Render mode quick reference](#render-mode-quick-ref)
-- [Arduino Core Selection](#arduino-core-selection)
-- [Recommended defaults for PandaTouch](#recommended-defaults-for-pandatouch)
-- [Common pitfalls (and fixes)](#common-pitfalls)
-- [Example: full `platformio.ini` skeleton](#example-platformioini)
-- [Hardware specs](#hardware-specs)
-- [Troubleshooting](#troubleshooting)
-- [Resources](#resources)
-- [FAQ](#faq)
+- Connects to Wi-Fi and retrieves filament inventory from a Spoolman server.
+- Displays spool vendor, material, name, remaining weight and colour.
+- Supports single-colour, transparent and multi-colour spool swatches.
+- Searches the locally loaded inventory by vendor, filament name, material or Spoolman spool ID.
+- Paginates the inventory in groups of four, with first, previous, next and last controls.
+- Opens a detail view with spool information, including remaining weight, initial weight, empty-spool weight, location and Spoolman ID.
+- Provides **Spools**, **Scale** and **Settings** pages, touchscreen navigation, brightness control and Wi-Fi status.
+- Includes a **USE ON SCALE** action as part of the developing scale workflow; this does **not** mean physical weighing is functional yet.
+- Provides serial startup diagnostics for display, Wi-Fi, Spoolman and UI initialization.
 
-<a id="whats-inside"></a>
+### Planned / in development
 
-## ✨ What’s inside
+- HX711 load-cell-based filament scale integration.
+- Live weight display and tare controls.
+- Selecting a spool for weighing and calculating remaining filament weight.
+- Updating spool weights in Spoolman after weighing, with appropriate confirmation and safeguards.
+- Further UI refinement and testing.
 
-- 📦 **PlatformIO template** for ESP32-S3 (Arduino framework)
-- 🖼️ **LVGL v9.3.0** graphics library integrated
-- 👆 **GT911 capacitive touch** driver (I²C)
-- 🖥️ **RGB parallel LCD** @ 800×480, RGB565
-- 🌗 **Backlight brightness control** via LEDC (PWM) with persistence
-- ⚡ Optimized LVGL **partial draw buffers** (PSRAM-aware)
-- 🧪 Demo apps (brightness slider, Hello World)
+## Hardware
 
-Perfect if you’re:
+- **BIGTREETECH Panda Touch V1.0** with ESP32-S3.
+- Built-in 800 × 480 RGB LCD and GT911 capacitive touchscreen.
+- 2.4 GHz Wi-Fi connection to a reachable Spoolman instance.
+- **Future scale hardware:** load cell, HX711 amplifier and associated controller/wiring (final architecture and connections are still being developed).
 
-- A maker getting started with PandaTouch
-- An embedded dev needing a quick LVGL boilerplate
-- An engineer prototyping a custom UI on ESP32-S3
+This is a custom firmware project, **not** the stock Panda Touch firmware. Flashing replaces the firmware currently installed on the device. Keep a backup or a known recovery method before experimenting.
 
-<a id="quick-start"></a>
+## Software stack
 
-## 🚀 Quick start
+- [PlatformIO](https://platformio.org/) in [Visual Studio Code](https://code.visualstudio.com/)
+- ESP32 Arduino framework (current working environment: `pandatouch`)
+- [LVGL 9.3.0](https://lvgl.io/)
+- [TAMC_GT911](https://github.com/tamctec/gt911-arduino)
+- [Arduino_GFX](https://github.com/moononournation/Arduino_GFX)
+- [ArduinoJson](https://arduinojson.org/)
+- [Spoolman](https://github.com/Donkie/Spoolman) REST API
 
-### 1. Install prerequisites
+The project currently uses the **`pandatouch`** PlatformIO environment for development and hardware testing. An alternative Arduino 3.x environment may exist in `platformio.ini`, but it should not be assumed to have been validated with this application.
 
-- [PlatformIO](https://platformio.org/install/ide?install=vscode) (VS Code recommended)
-- USB drivers (if your OS needs them)
-- PandaTouch Unit
+## Getting started
 
-### 2. Clone this repo
+### 1. Prerequisites
+
+1. Install VS Code and the PlatformIO extension.
+2. Have a Panda Touch V1.0 and a USB connection for flashing.
+3. Run a Spoolman server reachable over your local network.
+4. Make sure the Panda Touch can connect to the same network (or otherwise reach the server).
+
+### 2. Clone the repository
 
 ```bash
-git https://github.com/bigtreetech/PandaTouch_PlatformIO.git
-cd PandaTouch_PlatformIO
+git clone https://github.com/Rushmere3D/PandaTouch-Filament-Manager.git
+cd PandaTouch-Filament-Manager
 ```
 
-### 3. Build & upload
+Open the cloned folder in VS Code.
+
+### 3. Configure Wi-Fi and Spoolman
+
+Before building, inspect the project's configuration and network files, particularly:
+
+- `src/network/wifi_manager.h`
+- `src/network/spoolman_client.h`
+- Any local credentials or secrets header referenced by those files.
+
+Set your Wi-Fi credentials and the URL of your own Spoolman server according to the current source configuration. A typical Spoolman URL has the form:
+
+```text
+http://YOUR-SPOOLMAN-HOST:7912
+```
+
+**Do not commit Wi-Fi passwords, tokens or private configuration files.** Check `.gitignore` and `git status` before pushing changes. Configuration is currently developer-oriented; a complete on-device setup wizard is not documented or guaranteed.
+
+### 4. Build and flash
+
+In the PlatformIO terminal:
 
 ```bash
-# Build
-pio run
+pio run -e pandatouch
+pio run -e pandatouch -t upload
+```
 
-# Upload (replace port with yours)
-pio run -t upload -e pandatouch --upload-port /dev/ttyUSB0
+If automatic port selection fails, specify your actual serial port, for example on Windows:
 
-# Monitor
+```bash
+pio run -e pandatouch -t upload --upload-port COM7
+```
+
+`COM7` is only an example; use the port shown for your device.
+
+### 5. View serial diagnostics
+
+```bash
 pio device monitor -b 115200
 ```
 
-<a id="using-the-template"></a>
+The firmware logs its startup sequence and reports Spoolman inventory loading. For the serial interface used during current development, diagnostics worked **without** the `-DARDUINO_USB_CDC_ON_BOOT=1` build flag. Do not add that flag unless your own USB/serial setup requires it.
 
-## 🖥️ Using the template
+## Using the interface
 
-Below are a few small LVGL examples to get you started. The template initializes the display, touch, and LVGL for you — call `pt_setup_display([Render mode])` in `setup()` and be sure to call `pt_loop_display()` regularly from `loop()` so LVGL can run its timers and process touch events.
+**Spools:** Browse the loaded Spoolman inventory, enter a search term, move through pages, and tap a row to see its extended details. Press **BACK** to return to the list. The search text and page position are retained when returning from details.
 
-For more details, see [Render mode quick reference](#render-mode-quick-ref).
+**Scale:** A placeholder/development page for the planned weighing workflow. The **USE ON SCALE** button is present, but a working physical scale is not yet part of the firmware.
 
-Basic setup/loop skeleton:
+**Settings:** Device settings including display brightness and Wi-Fi connection information.
 
-```cpp
-#include "pt/pt_display.h"
-// #include "pt_demo.h"
+Inventory is currently loaded into device memory from Spoolman. Do not assume changes made elsewhere in Spoolman will appear instantly without a refresh or restart.
 
-void setup() {
-  // Choose a render mode at init (examples in pt_display.h):
-  // PT_LVGL_RENDER_FULL_1, PT_LVGL_RENDER_FULL_2,
-  // PT_LVGL_RENDER_PARTIAL_1, PT_LVGL_RENDER_PARTIAL_2 (default),
-  // PT_LVGL_RENDER_PARTIAL_1_PSRAM, PT_LVGL_RENDER_PARTIAL_2_PSRAM
-  pt_setup_display(PT_LVGL_RENDER_FULL_1); // init LCD, touch, LVGL using full-frame in PSRAM
-  // run the provided demo
-  // pt_demo_create_brightness_demo();
-}
+## Current limitations
 
-void loop() {
-  pt_loop_display(); // must be called regularly: runs lv_timer_handler and processes touch
-}
+- **No functioning load-cell scale yet.** HX711 integration and calibration are future work.
+- **No confirmed Spoolman weight-writing workflow yet.** The current integration reads spool information.
+- Network configuration may require editing local source/configuration files before building.
+- The project is under active development and is not a production-ready firmware release.
+
+### Display tearing and rendering
+
+This firmware builds on the original Arduino/PlatformIO Panda Touch display implementation. The 800 × 480 RGB LCD can exhibit tearing, flicker or timing-related artifacts depending on rendering mode and memory configuration. The ESP-IDF-based implementation offers more direct control of LCD timing; see [BIGTREETECH's PandaTouch_IDF project](https://github.com/bigtreetech/PandaTouch_IDF) for that alternative. The current application uses `pt_setup_display(PT_LVGL_RENDER_FULL_1)`.
+
+## Project structure
+
+Key files and folders currently used in development:
+
+```text
+src/
+  main.cpp                     Firmware startup and main loop
+  network/
+    wifi_manager.h             Wi-Fi connection
+    spoolman_client.h          Spoolman communication
+  models/
+    spool_store.h              In-memory spool data
+  ui/
+    ui_spools.h                Inventory, search and spool details
+    ui_scale.h                 Scale page
+    ui_settings.h              Settings page
+  ui_main.h                    Main UI and navigation
+  pt/                           Panda Touch display support
+include/
+  lv_conf.h                    LVGL configuration
+platformio.ini                 Build environments and dependencies
+docs/                          Hardware references and documentation
 ```
 
-1. Create a simple label:
+File layout and implementation may change as development continues.
 
-```cpp
-lv_obj_t *label = lv_label_create(lv_scr_act());
-lv_label_set_text(label, "Hello PandaTouch!");
-lv_obj_center(label);
-```
+## Credits and acknowledgements
 
-2. Create a button with an event callback:
+- **[BIGTREETECH](https://github.com/bigtreetech)** for the Panda Touch hardware and the original [PandaTouch PlatformIO template](https://github.com/bigtreetech/PandaTouch_PlatformIO) on which this firmware is based.
+- **[Spoolman](https://github.com/Donkie/Spoolman)** for the filament inventory management server and API.
+- The maintainers and contributors of LVGL, Arduino_GFX, TAMC_GT911, ArduinoJson, PlatformIO and the ESP32 Arduino ecosystem.
 
-```cpp
-static void btn_event_cb(lv_event_t *e) {
-  lv_event_code_t code = lv_event_get_code(e);
-  if (code == LV_EVENT_CLICKED) {
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_obj_t *lbl = lv_obj_get_child(btn, 0);
-    lv_label_set_text(lbl, "Clicked!");
-  }
-}
+This is an independent community project and is not an official BIGTREETECH or Spoolman firmware release. Refer to the repository's included licence and upstream dependency licences for applicable terms.
 
-lv_obj_t *btn = lv_btn_create(lv_scr_act());
-lv_obj_align(btn, LV_ALIGN_CENTER, 0, 40);
-lv_obj_add_event_cb(btn, btn_event_cb, LV_EVENT_ALL, NULL);
+## Useful references
 
-lv_obj_t *btn_label = lv_label_create(btn);
-lv_label_set_text(btn_label, "Press me");
-lv_obj_center(btn_label);
-```
-
-> Notes:
->
-> - Always call `pt_loop_display()` from `loop()` — the template's LVGL integration depends on it to run timers and to feed touch events.
-> - You can set the render mode globally at compile time via a build flag. Example (PlatformIO):
->
-> ```ini
-> build_flags = -DPT_LVGL_RENDER_METHOD=PT_LVGL_RENDER_FULL_1
-> ```
-
-Passing the mode to `pt_setup_display(...)` in code overrides the compile-time default for that call.
-
-<a id="render-mode-quick-ref"></a>
-
-## 🧩 Render mode quick reference
-
-| Method                           |                   Approx memory footprint | Recommended when...                                                          |
-| -------------------------------- | ----------------------------------------: | ---------------------------------------------------------------------------- |
-| `PT_LVGL_RENDER_FULL_1`          |              ~1x full framebuffer (PSRAM) | You have PSRAM and want full-frame rendering with minimal internal RAM usage |
-| `PT_LVGL_RENDER_FULL_2`          |              ~2x full framebuffer (PSRAM) | You have abundant PSRAM and need double-buffering to avoid tearing           |
-| `PT_LVGL_RENDER_PARTIAL_1`       | small partial buffer (internal preferred) | Internal RAM available but PSRAM is scarce; memory efficient                 |
-| `PT_LVGL_RENDER_PARTIAL_2`       |   2x partial buffers (internal preferred) | Want smoother flushes with limited RAM usage (default)                       |
-| `PT_LVGL_RENDER_PARTIAL_1_PSRAM` |             small partial buffer in PSRAM | Internal RAM limited, PSRAM available; slightly slower flushes               |
-| `PT_LVGL_RENDER_PARTIAL_2_PSRAM` |               2x partial buffers in PSRAM | Balance between smoothness and PSRAM usage                                   |
-
-> Note on partial buffer height:
->
-> - The number of scanlines used for partial buffers is controlled by the macro `PT_LVGL_RENDER_PARTIAL_LINES`. The default value in the code is `80` (see `pt/pt_display.h`). Larger values increase memory use but reduce the number of flushes; smaller values are more memory-efficient but may increase flush frequency.
->
-> To override the default at compile time with PlatformIO, add a build flag, for example:
->
-> ```ini
-> build_flags = -DPT_LVGL_RENDER_PARTIAL_LINES=120
-> ```
-
-> Note on LCD bounce buffer size:
->
-> - The driver may allocate a small "bounce" area used internally by the RGB panel driver for transient pixel buffering. The number of lines used for this bounce buffer is controlled by `PT_LCD_RENDER_BOUNCE_LINES` (default `10` in `pt/pt_display.h`). The actual pixel allocation equals `PT_LCD_RENDER_BOUNCE_LINES * PT_LCD_H_RES` and is passed to the panel driver as a small scratch buffer. Increase it if you see tearing/artifacts during panel bring-up; decreasing it saves a little RAM.
->
-> To override at compile time with PlatformIO:
->
-> ```ini
-> build_flags = -DPT_LCD_RENDER_BOUNCE_LINES=20
-> ```
-
-<a id="arduino-core-selection"></a>
-
-## 🧩 Arduino Core Selection (2.x vs 3.x) — How this template handles it
-
-This template provides two ready-to-use PlatformIO environments in `platformio.ini` so you can choose the Arduino core that fits your dependencies and hardware needs.
-
-Short story:
-
-- `pandatouch` — default environment using the PlatformIO-bundled Arduino 2.x compatible setup (widest library support).
-- `pandatouch-arduino-3x` — environment pinned to Arduino core 3.x (3.0.7) and paired SDK libs; useful for ESP32‑S3 + RGB LCD performance and newer USB features.
-
-Why two envs?
-
-- Some third-party Arduino libraries still expect the 2.x core. The 3.x core improves S3 support (USB, timing) but can break a few libraries.
-
-How to use the environments
-
-- The template's default environment is `pandatouch`. Running `pio run` without `-e` will build that environment.
-
-Example commands:
-
-```bash
-# Build the default env (pandatouch)
-pio run
-
-# Upload using the default env (replace port)
-pio run -t upload --upload-port /dev/ttyUSB0
-
-# Build using the 3.x pinned environment
-pio run -e pandatouch-arduino-3x
-
-# Upload using the 3.x env (replace port)
-pio run -e pandatouch-arduino-3x -t upload --upload-port /dev/ttyUSB0
-```
-
-> Notes on what changes between envs
->
-> - The environments have different `lib_deps`, and the 3.x env also declares `platform_packages` pointing to the Arduino-ESP32 3.0.7 GitHub tree and prebuilt SDK libs. That forces PlatformIO to use the 3.x core while keeping the rest of your project unchanged.
-> - Tip: list all envs in your `platformio.ini` with:
->
-> ```bash
-> pio run --list
-> ```
-
-### Recommended defaults for PandaTouch
-
-```ini
-build_flags =
-  -I include
-  -DLV_CONF_INCLUDE_SIMPLE
-  -DBOARD_HAS_PSRAM
-
-board_build.arduino.memory_type = qio_opi
-board_build.f_flash = 80000000L
-board_build.flash_mode = qio
-```
-
-- `BOARD_HAS_PSRAM` → allows LVGL to allocate larger buffers in PSRAM.
-- `qio_opi` + `80 MHz` flash → S3 + Octal PSRAM modules.
-- `LV_CONF_INCLUDE_SIMPLE` → include `lv_conf.h` in `include/`.
-
-<a id="common-pitfalls"></a>
-
-### Common pitfalls (and fixes)
-
--- “Why did my libs disappear?”  
- You probably used `lib_deps =` more than once in the same environment. Put all required libraries for an environment in a single `lib_deps` block to avoid accidentally overwriting earlier entries.
-
-- Switched envs and something won’t compile?  
-  Build the env that worked previously (for example `pio run -e pandatouch`) to confirm. If the 3.x env fails, either use the 2.x env or pin alternative library versions in `lib_deps` under the 3.x env.
-
-- USB confusion
-  - **USB‑C** on the board is for **power + flashing/serial**.
-  - **USB‑A** is **OTG** (host/device) and is controlled in software.
-
-<a id="example-platformioini"></a>
-
-### Example: full `platformio.ini` skeleton (multi-env)
-
-Below is the actual multi-environment `platformio.ini` used by this template. It exposes two working envs so you can switch between the PlatformIO-bundled 2.x setup and a pinned 3.x setup without manual edits.
-
-```ini
-; ================================================================
-; PandaTouch – PlatformIO Configuration
-; ================================================================
-
-[platformio]
-default_envs = pandatouch
-
-[env]
-platform = espressif32@6.12.0
-framework = arduino
-board = esp32-s3-devkitc-1
-monitor_speed = 115200
-lib_deps =
-  lvgl/lvgl@9.3.0
-  tamctec/TAMC_GT911@1.0.2
-build_flags =
-  -I include
-  -DLV_CONF_INCLUDE_SIMPLE
-  -DBOARD_HAS_PSRAM
-
-board_build.arduino.memory_type = qio_opi
-board_build.f_flash = 80000000L
-board_build.flash_mode = qio
-
-
-[env:pandatouch]
-lib_deps =
-  lvgl/lvgl@9.3.0
-  tamctec/TAMC_GT911@1.0.2
-  moononournation/GFX Library for Arduino@1.5.0
-
-[env:pandatouch-arduino-3x]
-lib_deps =
-  lvgl/lvgl@9.3.0
-  tamctec/TAMC_GT911@1.0.2
-  moononournation/GFX Library for Arduino@1.6.1
-platform_packages =
-  framework-arduinoespressif32 @ https://github.com/espressif/arduino-esp32.git#3.0.7
-  platformio/framework-arduinoespressif32-libs @ https://dl.espressif.com/AE/esp-arduino-libs/esp32-3.0.7.zip
-extra_scripts = pre:build_files_exclude.py
-custom_build_files_exclude = */Arduino_ESP32LCD8.cpp */Arduino_ESP32QSPI.cpp
-
-```
-
-<a id="hardware-specs"></a>
-
-## 📋 Hardware specs
-
-### MCU
-
-- **ESP32-S3** (dual-core Xtensa LX7 @ 240 MHz)
-- Wi-Fi 2.4 GHz, Bluetooth 5 LE
-- 8 MB **Octal PSRAM** onboard
-- Native USB-C for flashing & power
-- USB-A port for OTG device/host
-
-### LCD (RGB Parallel, 800×480)
-
-| Signal    | GPIO           | Notes                |
-| --------- | -------------- | -------------------- |
-| PCLK      | 5              | Pixel clock          |
-| DE        | 38             | Data enable          |
-| HSYNC     | –              | Not used (DE mode)   |
-| VSYNC     | –              | Not used (DE mode)   |
-| R3–R7     | 6–10           | Red data             |
-| G2–G7     | 11–16          | Green data           |
-| B3–B7     | 17,18,48,47,39 | Blue data            |
-| Backlight | 21             | PWM backlight (LEDC) |
-| Reset     | 46             | LCD reset            |
-
-### Touch (GT911, I²C0)
-
-| Signal | GPIO |
-| ------ | ---- |
-| SCL    | 1    |
-| SDA    | 2    |
-| IRQ    | 40   |
-| RST    | 41   |
-
-### I²C1 (example: AHT20 sensor)
-
-- SCL: GPIO3
-- SDA: GPIO4
-
-### USB
-
-- USB-C: Power + flashing
-- USB-A: OTG (host/device)
-- D−: GPIO19
-- D+: GPIO20
-
-<a id="troubleshooting"></a>
-
-## ⚠️ Troubleshooting
-
-- **Build errors (missing libs):** run `pio update` and recheck `lib_deps`.
-- **Out of memory:** confirm PSRAM is enabled (`BOARD_HAS_PSRAM`) and use partial LVGL buffers in `lv_conf.h`.
-- **Upload issues on macOS:** check port (`/dev/cu.usbserial-XXXX`) and close other serial monitors.
-
-<a id="resources"></a>
-
-## 📚 Resources
-
-- [LVGL Docs](https://docs.lvgl.io/)
-- [PlatformIO Docs](https://docs.platformio.org/)
-- [ESP32-S3 (espressif32)](https://docs.platformio.org/en/latest/boards/espressif32/esp32-s3-devkitc-1.html)
-- [LCD Datasheet](docs/QX05ZJGI70N-05545Y.pdf)
+- [Panda Touch documentation](https://bttwiki.com/PandaTouch.html)
+- [Original PandaTouch PlatformIO project](https://github.com/bigtreetech/PandaTouch_PlatformIO)
+- [PandaTouch ESP-IDF project](https://github.com/bigtreetech/PandaTouch_IDF)
+- [Spoolman](https://github.com/Donkie/Spoolman)
+- [LVGL documentation](https://docs.lvgl.io/)
+- [PlatformIO documentation](https://docs.platformio.org/)
 - [Pinout reference](docs/PINOUT.md)
-
-<a id="faq"></a>
-
-## ❓ FAQ
-
-**Q: Which core should I start with?**  
-A: Start with **2.x** if you depend on many third‑party Arduino libs. Switch to **3.x** for best ESP32‑S3 + LCD performance once your dependencies are compatible.
-
-**Q: How do I revert to 2.x?**  
-A: The template exposes a ready-to-use 2.x environment named `pandatouch`. Build with that env to use the PlatformIO-bundled Arduino 2.x setup:
-
-```bash
-# Build using the 2.x env
-pio run -e pandatouch
-
-# Upload using the 2.x env
-pio run -e pandatouch -t upload --upload-port /dev/ttyUSB0
-```
-
-If you prefer to keep a single `platformio.ini` env and manually edit it, you can still remove/comment the `platform_packages` block and any 3.x-specific `lib_deps` and then run a clean build (`pio run -t clean`) before rebuilding.
-
-Alternatively, copy the contents of `platformio.example.ini` to your `platformio.ini` to restore a standalone 2.x configuration.
-
-**Q: Can I mix `lib_deps` blocks?**  
-A: It's best to list all libraries for an environment in one `lib_deps` block. If you include multiple `lib_deps =` blocks in the same `[env]`, a later one will overwrite earlier entries.
+- [LCD datasheet](docs/QX05ZJGI70N-05545Y.pdf)
