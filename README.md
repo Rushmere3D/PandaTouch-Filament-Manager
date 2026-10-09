@@ -67,11 +67,16 @@ Open the cloned folder in VS Code.
 
 ### 3. Configure Wi-Fi and Spoolman
 
+1. Copy `include/secrets.example.h` to `include/secrets.h`.
+2. Edit `secrets.h` with your Wi-Fi SSID, password and Spoolman server URL.
+3. Build and upload the firmware using PlatformIO.
+
+The real `secrets.h` file is excluded from Git to prevent credentials from being committed to the repository.
+
 Before building, inspect the project's configuration and network files, particularly:
 
 - `src/network/wifi_manager.h`
 - `src/network/spoolman_client.h`
-- Any local credentials or secrets header referenced by those files.
 
 Set your Wi-Fi credentials and the URL of your own Spoolman server according to the current source configuration. A typical Spoolman URL has the form:
 
