@@ -328,7 +328,7 @@ inline void ui_spool_style_button(lv_obj_t *button)
 
     lv_obj_set_style_bg_color(button, lv_color_hex(0x394650), LV_PART_MAIN);
 
-    lv_obj_set_style_bg_color(button, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x3A3126), LV_PART_MAIN | LV_STATE_PRESSED);
 
     lv_obj_set_style_bg_color(button, lv_color_hex(0x252D34), LV_PART_MAIN | LV_STATE_DISABLED);
 
@@ -865,7 +865,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
     lv_textarea_set_placeholder_text(ui_spool_search_input, "Search spools...");
 
-    lv_obj_set_style_bg_color(ui_spool_search_input, lv_color_hex(0x26313A), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(ui_spool_search_input, lv_color_hex(0x3A3126), LV_PART_MAIN);
 
     lv_obj_set_style_text_color(ui_spool_search_input, lv_color_white(), LV_PART_MAIN);
 
@@ -927,7 +927,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
         lv_obj_set_style_bg_color(ui_spool_rows[row], lv_color_hex(0x1A2026), LV_PART_MAIN);
 
-        lv_obj_set_style_bg_color(ui_spool_rows[row], lv_color_hex(0x26313A), LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(ui_spool_rows[row], lv_color_hex(0x3A3126), LV_PART_MAIN | LV_STATE_PRESSED);
 
         lv_obj_set_style_border_width(ui_spool_rows[row], 0, LV_PART_MAIN);
 

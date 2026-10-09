@@ -48,7 +48,7 @@ static void ui_update_nav_buttons(UiPage active_page)
     }
 
     if (active_button != nullptr)
-        lv_obj_set_style_bg_color(active_button, lv_color_hex(0xD27619), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(active_button, lv_color_hex(0x3A3126), LV_PART_MAIN);
 }
 
 static void ui_show_page(UiPage page)

@@ -8,7 +8,7 @@
 // Use a BGR-swapped value for the intended on-screen blue accent.
 static inline lv_color_t ui_settings_accent_blue()
 {
-    return lv_color_hex(0xD27619); // displays as #1976D2
+    return lv_color_hex(0x3A3126); // displays as #26313A
 }
 
 static inline void ui_settings_style_slider(lv_obj_t *slider)
