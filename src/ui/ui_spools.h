@@ -859,7 +859,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
     lv_obj_set_size(ui_spool_search_input, 535, 30);
 
-    lv_obj_align(ui_spool_search_input, LV_ALIGN_TOP_LEFT, 8, -5);
+    lv_obj_align(ui_spool_search_input, LV_ALIGN_TOP_LEFT, 8, -9);
 
     lv_textarea_set_one_line(ui_spool_search_input, true);
 
@@ -871,11 +871,17 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
     lv_obj_set_style_border_width(ui_spool_search_input, 0, LV_PART_MAIN);
 
-    lv_obj_set_style_radius(ui_spool_search_input, 5, LV_PART_MAIN);
+    lv_obj_set_style_radius(ui_spool_search_input, 7, LV_PART_MAIN);
 
-    lv_obj_set_style_pad_top(ui_spool_search_input, 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(ui_spool_search_input, 8, LV_PART_MAIN);
 
-    lv_obj_set_style_pad_bottom(ui_spool_search_input, 3, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(ui_spool_search_input, 6, LV_PART_MAIN);
+
+    lv_obj_set_style_outline_width(ui_spool_search_input, 0, LV_PART_MAIN);
+
+    lv_obj_set_style_shadow_width(ui_spool_search_input, 0, LV_PART_MAIN);
+    
+    lv_obj_set_style_min_height(ui_spool_search_input, 0, LV_PART_MAIN);
 
     lv_obj_add_event_cb(ui_spool_search_input, ui_spools_search_focus_cb, LV_EVENT_CLICKED, nullptr);
 
@@ -887,7 +893,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
     lv_obj_set_size(ui_spool_search_clear, 45, 30);
 
-    lv_obj_align(ui_spool_search_clear, LV_ALIGN_TOP_LEFT, 550, -5);
+    lv_obj_align(ui_spool_search_clear, LV_ALIGN_TOP_LEFT, 550, -9);
 
     lv_obj_add_event_cb(ui_spool_search_clear, ui_spools_search_clear_cb, LV_EVENT_CLICKED, nullptr);
 
@@ -925,7 +931,7 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
 
         lv_obj_set_height(ui_spool_rows[row], 54);
 
-        lv_obj_set_style_bg_color(ui_spool_rows[row], lv_color_hex(0x1A2026), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(ui_spool_rows[row], lv_color_hex(0x101418), LV_PART_MAIN);
 
         lv_obj_set_style_bg_color(ui_spool_rows[row], lv_color_hex(0x3A3126), LV_PART_MAIN | LV_STATE_PRESSED);
 
