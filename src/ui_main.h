@@ -114,7 +114,7 @@ inline void ui_create_main()
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *title = lv_label_create(screen);
-    lv_label_set_text(title, "FILAMENT MANAGER");
+    lv_label_set_text(title, "SPOOLMAN FILAMENT MANAGER");
     lv_obj_set_style_text_color(title, lv_color_white(), LV_PART_MAIN);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 25);
 
