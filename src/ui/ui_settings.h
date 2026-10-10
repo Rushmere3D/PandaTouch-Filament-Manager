@@ -4,8 +4,7 @@
 #include <WiFi.h>
 #include "../pt/pt_display.h"
 
-// The Panda Touch display swaps red and blue in the current display pipeline.
-// Use a BGR-swapped value for the intended on-screen blue accent.
+// The Panda Touch swaps red and blue in the current display pipeline.
 static inline lv_color_t ui_settings_accent_blue()
 {
     return lv_color_hex(0x3A3126); // displays as #26313A
@@ -33,6 +32,23 @@ static inline void ui_settings_style_switch(lv_obj_t *sw)
     lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_KNOB);
 }
 
+static inline void ui_settings_style_dropdown(lv_obj_t *dropdown)
+{
+    lv_obj_set_style_bg_color(dropdown, lv_color_hex(0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(dropdown, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_text_color(dropdown, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_border_width(dropdown, 0, LV_PART_MAIN);
+}
+
+static inline uint16_t ui_settings_timeout_selection(uint16_t minutes)
+{
+    if (minutes == 1) return 0;
+    if (minutes == 2) return 1;
+    if (minutes == 5) return 2;
+    if (minutes == 10) return 3;
+    return 4;
+}
+
 static void ui_settings_brightness_cb(lv_event_t *e)
 {
     lv_obj_t *slider = (lv_obj_t *)lv_event_get_target(e);
@@ -52,10 +68,9 @@ static void ui_settings_dimming_cb(lv_event_t *e)
 static void ui_settings_dim_timeout_cb(lv_event_t *e)
 {
     lv_obj_t *dropdown = (lv_obj_t *)lv_event_get_target(e);
-    uint32_t selected = lv_dropdown_get_selected(dropdown);
     const uint16_t minutes[] = {1, 2, 5, 10, 30};
-    if (selected < 5)
-        pt_screen_set_dim_timeout_minutes(minutes[selected]);
+    uint32_t selected = lv_dropdown_get_selected(dropdown);
+    if (selected < 5) pt_screen_set_dim_timeout_minutes(minutes[selected]);
 }
 
 static void ui_settings_dim_brightness_cb(lv_event_t *e)
@@ -65,6 +80,20 @@ static void ui_settings_dim_brightness_cb(lv_event_t *e)
     int32_t brightness = lv_slider_get_value(slider);
     pt_screen_set_dim_percent((uint8_t)brightness);
     lv_label_set_text_fmt(label, "Dim brightness: %ld%%", (long)brightness);
+}
+
+static void ui_settings_screen_off_cb(lv_event_t *e)
+{
+    lv_obj_t *sw = (lv_obj_t *)lv_event_get_target(e);
+    pt_screen_set_off_enabled(lv_obj_has_state(sw, LV_STATE_CHECKED));
+}
+
+static void ui_settings_off_timeout_cb(lv_event_t *e)
+{
+    lv_obj_t *dropdown = (lv_obj_t *)lv_event_get_target(e);
+    const uint16_t minutes[] = {1, 2, 5, 10, 30};
+    uint32_t selected = lv_dropdown_get_selected(dropdown);
+    if (selected < 5) pt_screen_set_off_timeout_minutes(minutes[selected]);
 }
 
 inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
@@ -96,6 +125,34 @@ inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
     }
     lv_obj_align(wifi_info, LV_ALIGN_TOP_LEFT, 20, 45);
 
+    // Screen-off controls use the unused space below the Wi-Fi information.
+    lv_obj_t *off_label = lv_label_create(page);
+    lv_label_set_text(off_label, "Screen off");
+    lv_obj_set_style_text_color(off_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align(off_label, LV_ALIGN_TOP_LEFT, 20, 157);
+
+    lv_obj_t *off_switch = lv_switch_create(page);
+    lv_obj_align(off_switch, LV_ALIGN_TOP_LEFT, 240, 149);
+    ui_settings_style_switch(off_switch);
+    if (pt_screen_off_enabled) lv_obj_add_state(off_switch, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(off_switch, ui_settings_screen_off_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    lv_obj_t *off_timeout_label = lv_label_create(page);
+    lv_label_set_text(off_timeout_label, "Turn off after");
+    lv_obj_set_style_text_color(off_timeout_label, lv_color_white(), LV_PART_MAIN);
+    lv_obj_align(off_timeout_label, LV_ALIGN_TOP_LEFT, 20, 211);
+
+    lv_obj_t *off_timeout_dropdown = lv_dropdown_create(page);
+    lv_dropdown_set_options(off_timeout_dropdown,
+        "1 minute\n2 minutes\n5 minutes\n10 minutes\n30 minutes");
+    lv_obj_set_width(off_timeout_dropdown, 150);
+    lv_obj_align(off_timeout_dropdown, LV_ALIGN_TOP_LEFT, 165, 199);
+    ui_settings_style_dropdown(off_timeout_dropdown);
+    lv_dropdown_set_selected(off_timeout_dropdown,
+                             ui_settings_timeout_selection(pt_screen_get_off_timeout_minutes()));
+    lv_obj_add_event_cb(off_timeout_dropdown, ui_settings_off_timeout_cb,
+                        LV_EVENT_VALUE_CHANGED, nullptr);
+
     lv_obj_t *display_title = lv_label_create(page);
     lv_label_set_text(display_title, "Display");
     lv_obj_set_style_text_color(display_title, lv_color_white(), LV_PART_MAIN);
@@ -123,8 +180,7 @@ inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
     lv_obj_t *dimming_switch = lv_switch_create(page);
     lv_obj_align(dimming_switch, LV_ALIGN_TOP_LEFT, 640, 98);
     ui_settings_style_switch(dimming_switch);
-    if (pt_screen_dimming_enabled)
-        lv_obj_add_state(dimming_switch, LV_STATE_CHECKED);
+    if (pt_screen_dimming_enabled) lv_obj_add_state(dimming_switch, LV_STATE_CHECKED);
     lv_obj_add_event_cb(dimming_switch, ui_settings_dimming_cb,
                         LV_EVENT_VALUE_CHANGED, nullptr);
 
@@ -138,19 +194,9 @@ inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
         "1 minute\n2 minutes\n5 minutes\n10 minutes\n30 minutes");
     lv_obj_set_width(timeout_dropdown, 150);
     lv_obj_align(timeout_dropdown, LV_ALIGN_TOP_LEFT, 550, 137);
-    lv_obj_set_style_bg_color(timeout_dropdown, lv_color_hex(0x394650), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(timeout_dropdown, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_text_color(timeout_dropdown, lv_color_white(), LV_PART_MAIN);
-    lv_obj_set_style_border_width(timeout_dropdown, 0, LV_PART_MAIN);
-
-    uint16_t timeout_minutes = pt_screen_get_dim_timeout_minutes();
-    uint16_t timeout_selection = 2; // default to 5 minutes
-    if (timeout_minutes == 1) timeout_selection = 0;
-    else if (timeout_minutes == 2) timeout_selection = 1;
-    else if (timeout_minutes == 5) timeout_selection = 2;
-    else if (timeout_minutes == 10) timeout_selection = 3;
-    else if (timeout_minutes == 30) timeout_selection = 4;
-    lv_dropdown_set_selected(timeout_dropdown, timeout_selection);
+    ui_settings_style_dropdown(timeout_dropdown);
+    lv_dropdown_set_selected(timeout_dropdown,
+                             ui_settings_timeout_selection(pt_screen_get_dim_timeout_minutes()));
     lv_obj_add_event_cb(timeout_dropdown, ui_settings_dim_timeout_cb,
                         LV_EVENT_VALUE_CHANGED, nullptr);
 
@@ -167,5 +213,6 @@ inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
     ui_settings_style_slider(dim_brightness_slider);
     lv_obj_add_event_cb(dim_brightness_slider, ui_settings_dim_brightness_cb,
                         LV_EVENT_VALUE_CHANGED, dim_brightness_label);
+
     return page;
 }
