@@ -5,6 +5,7 @@
  *  Includes
  * ========================= */
 #include <Arduino.h>
+#include <Preferences.h>
 #include <algorithm>
 #include <driver/ledc.h>
 #include <esp_heap_caps.h>
@@ -100,6 +101,80 @@ static bool pt_screen_off_enabled = false;
 static uint32_t pt_screen_off_timeout_ms = 10UL * 60UL * 1000UL;
 static bool pt_screen_is_off = false;
 
+// Display preferences are saved only after changes settle, to limit flash wear.
+static bool pt_settings_dirty = false;
+static uint32_t pt_settings_changed_ms = 0;
+
+inline void pt_screen_mark_settings_changed()
+{
+  pt_settings_dirty = true;
+  pt_settings_changed_ms = millis();
+}
+
+inline bool pt_screen_valid_timeout(uint16_t minutes)
+{
+  return minutes == 1 || minutes == 2 || minutes == 5 ||
+         minutes == 10 || minutes == 30;
+}
+
+inline void pt_screen_load_settings()
+{
+  Preferences prefs;
+  if (!prefs.begin("pt-display", true))
+  {
+    Serial.println("[DISPLAY] Could not read saved settings; using defaults");
+    return;
+  }
+
+  uint8_t brightness = prefs.getUChar("bright", 100);
+  pt_backlight_percent = constrain(brightness, (uint8_t)20, (uint8_t)100);
+  pt_screen_dimming_enabled = prefs.getBool("dimOn", true);
+  uint16_t dim_minutes = prefs.getUShort("dimMins", 5);
+  if (pt_screen_valid_timeout(dim_minutes))
+    pt_screen_dim_timeout_ms = (uint32_t)dim_minutes * 60000UL;
+  uint8_t dim_percent = prefs.getUChar("dimPct", 15);
+  pt_screen_dim_percent = constrain(dim_percent, (uint8_t)5, (uint8_t)30);
+  pt_screen_off_enabled = prefs.getBool("offOn", false);
+  uint16_t off_minutes = prefs.getUShort("offMins", 10);
+  if (pt_screen_valid_timeout(off_minutes))
+    pt_screen_off_timeout_ms = (uint32_t)off_minutes * 60000UL;
+  prefs.end();
+  Serial.println("[DISPLAY] Preferences loaded");
+}
+
+inline void pt_screen_save_settings_if_needed()
+{
+  if (!pt_settings_dirty || (uint32_t)(millis() - pt_settings_changed_ms) < 1500UL)
+    return;
+
+  Preferences prefs;
+  if (!prefs.begin("pt-display", false))
+  {
+    Serial.println("[DISPLAY] Could not open preferences for saving");
+    pt_settings_changed_ms = millis(); // Retry later
+    return;
+  }
+
+  // Each key is stable across firmware updates. Never save transient dim/off state.
+  size_t written = 0;
+  written += prefs.putUChar("bright", pt_backlight_percent);
+  written += prefs.putBool("dimOn", pt_screen_dimming_enabled);
+  written += prefs.putUShort("dimMins", (uint16_t)(pt_screen_dim_timeout_ms / 60000UL));
+  written += prefs.putUChar("dimPct", pt_screen_dim_percent);
+  written += prefs.putBool("offOn", pt_screen_off_enabled);
+  written += prefs.putUShort("offMins", (uint16_t)(pt_screen_off_timeout_ms / 60000UL));
+  prefs.end();
+  if (written != 8)
+  {
+    Serial.println("[DISPLAY] Preferences save failed; retrying");
+    pt_settings_changed_ms = millis();
+    return;
+  }
+  pt_settings_dirty = false;
+  Serial.println("[DISPLAY] Preferences saved");
+}
+
+
 /* =========================
  *  Helpers
  * ========================= */
@@ -150,7 +225,11 @@ inline void pt_set_backlight(uint8_t percent, bool save)
   ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
   if (save)
   {
-    pt_backlight_percent = percent;
+    if (pt_backlight_percent != percent)
+    {
+      pt_backlight_percent = percent;
+      pt_screen_mark_settings_changed();
+    }
   }
 }
 /**
@@ -240,7 +319,11 @@ inline void pt_screen_note_activity()
 
 inline void pt_screen_set_dimming_enabled(bool enabled)
 {
-  pt_screen_dimming_enabled = enabled;
+  if (pt_screen_dimming_enabled != enabled)
+  {
+    pt_screen_dimming_enabled = enabled;
+    pt_screen_mark_settings_changed();
+  }
   pt_last_touch_ms = millis();
   if (!enabled && pt_screen_is_dimmed && !pt_screen_is_off)
   {
@@ -252,7 +335,11 @@ inline void pt_screen_set_dimming_enabled(bool enabled)
 inline void pt_screen_set_dim_timeout_minutes(uint16_t minutes)
 {
   if (minutes < 1) minutes = 1;
-  pt_screen_dim_timeout_ms = (uint32_t)minutes * 60000UL;
+  if (pt_screen_dim_timeout_ms != (uint32_t)minutes * 60000UL)
+  {
+    pt_screen_dim_timeout_ms = (uint32_t)minutes * 60000UL;
+    pt_screen_mark_settings_changed();
+  }
   pt_last_touch_ms = millis();
 }
 
@@ -265,14 +352,22 @@ inline void pt_screen_set_dim_percent(uint8_t percent)
 {
   if (percent < 1) percent = 1;
   if (percent > 50) percent = 50;
-  pt_screen_dim_percent = percent;
+  if (pt_screen_dim_percent != percent)
+  {
+    pt_screen_dim_percent = percent;
+    pt_screen_mark_settings_changed();
+  }
   if (pt_screen_is_dimmed && !pt_screen_is_off)
     pt_set_backlight(pt_screen_dim_percent, false);
 }
 
 inline void pt_screen_set_off_enabled(bool enabled)
 {
-  pt_screen_off_enabled = enabled;
+  if (pt_screen_off_enabled != enabled)
+  {
+    pt_screen_off_enabled = enabled;
+    pt_screen_mark_settings_changed();
+  }
   pt_last_touch_ms = millis();
   if (!enabled && pt_screen_is_off)
     pt_screen_note_activity();
@@ -281,7 +376,11 @@ inline void pt_screen_set_off_enabled(bool enabled)
 inline void pt_screen_set_off_timeout_minutes(uint16_t minutes)
 {
   if (minutes < 1) minutes = 1;
-  pt_screen_off_timeout_ms = (uint32_t)minutes * 60000UL;
+  if (pt_screen_off_timeout_ms != (uint32_t)minutes * 60000UL)
+  {
+    pt_screen_off_timeout_ms = (uint32_t)minutes * 60000UL;
+    pt_screen_mark_settings_changed();
+  }
   pt_last_touch_ms = millis();
 }
 
@@ -364,8 +463,9 @@ inline void pt_setup_display(PT_LVGL_render_method_t mode = (PT_LVGL_render_meth
   digitalWrite(PT_LCD_RESET_PIN, 1);
   delay(10);
   // Backlight setup
-  pt_init_backlight(100); // Set backlight to max brightness (100%)
-  ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, (1 << LEDC_TIMER_11_BIT) - 1);
+  pt_screen_load_settings();
+  pt_init_backlight(pt_backlight_percent); // Restore saved brightness
+  ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, pt_get_duty_from_percent(pt_backlight_percent));
   ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
   // Panel bring-up
   pt_gfx.begin();
@@ -539,6 +639,7 @@ inline void pt_setup_display(PT_LVGL_render_method_t mode = (PT_LVGL_render_meth
 inline void pt_loop_display()
 {
   pt_screen_update();
+  pt_screen_save_settings_if_needed();
   lv_task_handler();
 }
 #endif // PT_DISPLAY_H
