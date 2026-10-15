@@ -98,6 +98,41 @@ inline void ui_scale_set_disconnected()
     lv_label_set_text(ui_scale_status, "Scale disconnected");
 }
 
+typedef void (*UiScaleTareCallback)();
+
+static UiScaleTareCallback ui_scale_tare_callback = nullptr;
+
+inline void ui_scale_set_tare_callback(UiScaleTareCallback callback)
+{
+    ui_scale_tare_callback = callback;
+}
+
+inline void ui_scale_tare_clicked(lv_event_t *event)
+{
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED &&
+        ui_scale_tare_callback != nullptr)
+    {
+        ui_scale_tare_callback();
+    }
+}
+
+inline void ui_scale_set_tare_enabled(bool enabled)
+{
+    if (ui_scale_tare_button == nullptr)
+        return;
+
+    if (enabled)
+        lv_obj_remove_state(ui_scale_tare_button, LV_STATE_DISABLED);
+    else
+        lv_obj_add_state(ui_scale_tare_button, LV_STATE_DISABLED);
+}
+
+inline void ui_scale_set_tare_status(const char *message)
+{
+    if (ui_scale_status != nullptr)
+        lv_label_set_text(ui_scale_status, message);
+}
+
 inline lv_obj_t *ui_scale_create(lv_obj_t *parent)
 {
     lv_obj_t *page = lv_obj_create(parent);
@@ -151,6 +186,12 @@ inline lv_obj_t *ui_scale_create(lv_obj_t *parent)
     lv_obj_align(ui_scale_status, LV_ALIGN_CENTER, 0, 25);
 
     ui_scale_tare_button = lv_button_create(page);
+lv_obj_add_event_cb(
+    ui_scale_tare_button,
+    ui_scale_tare_clicked,
+    LV_EVENT_CLICKED,
+    nullptr
+);
     lv_obj_set_size(ui_scale_tare_button, 180, 42);
     lv_obj_align(ui_scale_tare_button, LV_ALIGN_BOTTOM_RIGHT, -20, 0);
 
