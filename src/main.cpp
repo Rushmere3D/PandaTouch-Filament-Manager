@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <WiFi.h>
+#include <math.h>
 
 #include "pt/pt_display.h"
 #include "ui_main.h"
@@ -11,62 +13,108 @@
 
 // -------------------- Scale connection --------------------
 
-// Replace this IP with your scale ESP32's actual IP address.
+// Replace with your scale ESP32's actual IP address.
 const char* SCALE_URL = "http://192.168.1.222/api/weight";
 
 constexpr uint32_t SCALE_POLL_INTERVAL_MS = 3000;
-uint32_t lastScalePollMs = 0;
+constexpr uint32_t SCALE_HTTP_TIMEOUT_MS = 1500;
 
-// -------------------- Scale polling --------------------
+// -------------------- Shared scale data --------------------
 
-void pollScale()
+struct ScaleReading
 {
-    if (WiFi.status() != WL_CONNECTED)
+    float grams;
+    bool connected;
+    uint32_t sequence;
+};
+
+ScaleReading scaleReading = {0.0f, false, 0};
+
+SemaphoreHandle_t scaleMutex = nullptr;
+TaskHandle_t scaleTaskHandle = nullptr;
+
+// -------------------- Background HTTP task --------------------
+
+void scalePollingTask(void* parameter)
+{
+    uint32_t sequence = 0;
+
+    for (;;)
     {
-        Serial.println("[SCALE] Wi-Fi disconnected");
-        ui_scale_set_disconnected();
-        return;
-    }
+        float grams = 0.0f;
+        bool connected = false;
 
-    HTTPClient http;
-    http.setTimeout(1500);
-
-    if (!http.begin(SCALE_URL))
-    {
-        Serial.println("[SCALE] Failed to initialise HTTP client");
-        ui_scale_set_disconnected();
-        return;
-    }
-
-    int statusCode = http.GET();
-
-    if (statusCode == HTTP_CODE_OK)
-    {
-        String response = http.getString();
-
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, response);
-
-        if (!error && doc["weight"].is<float>())
+        if (WiFi.status() == WL_CONNECTED)
         {
-            float grams = doc["weight"].as<float>();
+            HTTPClient http;
+            http.setTimeout(SCALE_HTTP_TIMEOUT_MS);
 
-            Serial.printf("[SCALE] Weight: %.1f g\n", grams);
-            ui_scale_update_weight(grams);
+            if (http.begin(SCALE_URL))
+            {
+                const int statusCode = http.GET();
+
+                if (statusCode == HTTP_CODE_OK)
+                {
+                    String response = http.getString();
+
+                    JsonDocument doc;
+                    DeserializationError error =
+                        deserializeJson(doc, response);
+
+                    if (!error && doc["weight"].is<float>())
+                    {
+                        grams = doc["weight"].as<float>();
+                        connected = isfinite(grams);
+                    }
+                }
+
+                http.end();
+            }
         }
-        else
+
+        // Publish the result without calling LVGL.
+        if (xSemaphoreTake(scaleMutex, portMAX_DELAY) == pdTRUE)
         {
-            Serial.println("[SCALE] Invalid JSON response");
-            ui_scale_set_disconnected();
+            scaleReading.grams = grams;
+            scaleReading.connected = connected;
+            scaleReading.sequence = ++sequence;
+
+            xSemaphoreGive(scaleMutex);
         }
+
+        vTaskDelay(pdMS_TO_TICKS(SCALE_POLL_INTERVAL_MS));
+    }
+}
+
+// -------------------- Main-loop UI update --------------------
+
+void updateScaleDisplay()
+{
+    static uint32_t lastSequence = 0;
+
+    ScaleReading reading;
+
+    if (xSemaphoreTake(scaleMutex, 0) != pdTRUE)
+        return;
+
+    reading = scaleReading;
+    xSemaphoreGive(scaleMutex);
+
+    if (reading.sequence == lastSequence)
+        return;
+
+    lastSequence = reading.sequence;
+
+    if (reading.connected)
+    {
+        Serial.printf("[SCALE] Weight: %.1f g\n", reading.grams);
+        ui_scale_update_weight(reading.grams);
     }
     else
     {
-        Serial.printf("[SCALE] HTTP error: %d\n", statusCode);
+        Serial.println("[SCALE] Scale disconnected");
         ui_scale_set_disconnected();
     }
-
-    http.end();
 }
 
 // -------------------- Setup --------------------
@@ -75,7 +123,6 @@ void setup()
 {
     Serial.begin(115200);
 
-    // Allow ESP32-S3 USB serial to initialise.
     unsigned long start = millis();
     while (!Serial && millis() - start < 3000)
     {
@@ -108,6 +155,37 @@ void setup()
     Serial.println("[UI] Creating interface...");
     ui_create_main();
 
+    // Create the mutex before starting the background task.
+    scaleMutex = xSemaphoreCreateMutex();
+
+    if (scaleMutex == nullptr)
+    {
+        Serial.println("[SCALE] Failed to create mutex");
+        ui_scale_set_disconnected();
+    }
+    else
+    {
+        BaseType_t result = xTaskCreatePinnedToCore(
+            scalePollingTask,
+            "ScalePolling",
+            8192,
+            nullptr,
+            1,
+            &scaleTaskHandle,
+            0
+        );
+
+        if (result == pdPASS)
+        {
+            Serial.println("[SCALE] Background polling started");
+        }
+        else
+        {
+            Serial.println("[SCALE] Failed to start background task");
+            ui_scale_set_disconnected();
+        }
+    }
+
     Serial.println("[STARTUP] Setup complete");
 }
 
@@ -117,9 +195,8 @@ void loop()
 {
     pt_loop_display();
 
-    if (millis() - lastScalePollMs >= SCALE_POLL_INTERVAL_MS)
+    if (scaleMutex != nullptr && scaleTaskHandle != nullptr)
     {
-        lastScalePollMs = millis();
-        pollScale();
+        updateScaleDisplay();
     }
 }
