@@ -77,6 +77,27 @@ inline void ui_scale_select_spool(size_t spool_index)
     ui_scale_refresh_selected_spool();
 }
 
+inline void ui_scale_update_weight(float grams)
+{
+    if (ui_scale_weight == nullptr || ui_scale_status == nullptr)
+        return;
+
+    char text[32];
+    snprintf(text, sizeof(text), "%.1f g", grams);
+
+    lv_label_set_text(ui_scale_weight, text);
+    lv_label_set_text(ui_scale_status, "Scale connected");
+}
+
+inline void ui_scale_set_disconnected()
+{
+    if (ui_scale_weight == nullptr || ui_scale_status == nullptr)
+        return;
+
+    lv_label_set_text(ui_scale_weight, "-- g");
+    lv_label_set_text(ui_scale_status, "Scale disconnected");
+}
+
 inline lv_obj_t *ui_scale_create(lv_obj_t *parent)
 {
     lv_obj_t *page = lv_obj_create(parent);
