@@ -24,6 +24,10 @@ constexpr uint32_t SCALE_STABLE_WINDOW_MS = 2000;
 constexpr float SCALE_STABLE_TOLERANCE_G = 1.0f;
 constexpr uint8_t SCALE_STABLE_SAMPLES = 5;
 
+// Stage 5B: background inventory synchronisation every 60 seconds.
+constexpr uint32_t INVENTORY_AUTO_REFRESH_MS = 60000;
+static uint32_t lastInventoryRefreshStartedMs = 0;
+
 // Stage 3B: the network worker never calls LVGL or edits spool_store.
 struct SpoolUpdateState {
     bool busy = false;
@@ -78,6 +82,7 @@ void requestInventoryRefresh() {
     if (inventoryRefresh.busy) { xSemaphoreGive(inventoryRefreshMutex); return; }
     inventoryRefresh.busy = true;
     inventoryRefresh.finished = false;
+    lastInventoryRefreshStartedMs = millis();
     xSemaphoreGive(inventoryRefreshMutex);
     ui_spools_set_refresh_status(true, "Refreshing inventory...");
     if (xTaskCreatePinnedToCore(inventoryRefreshTask, "InventoryRefresh", 12288,
@@ -139,6 +144,27 @@ void processInventoryRefreshResult() {
 }
 
 
+// Called on the LVGL/UI thread. The existing refresh function handles
+// concurrency with Spoolman updates and manual refreshes.
+void processAutomaticInventoryRefresh() {
+    if (!inventoryRefreshMutex || !spoolUpdateMutex) return;
+    if ((uint32_t)(millis() - lastInventoryRefreshStartedMs) < INVENTORY_AUTO_REFRESH_MS) return;
+
+    // Do not launch an automatic request during an existing refresh.
+    if (xSemaphoreTake(inventoryRefreshMutex, 0) != pdTRUE) return;
+    const bool refreshing = inventoryRefresh.busy;
+    xSemaphoreGive(inventoryRefreshMutex);
+    if (refreshing) return;
+
+    // Wait until an in-progress Spoolman weight update has completed.
+    if (xSemaphoreTake(spoolUpdateMutex, 0) != pdTRUE) return;
+    const bool updating = spoolUpdate.busy;
+    xSemaphoreGive(spoolUpdateMutex);
+    if (updating) return;
+
+    Serial.println("[SPOOLMAN] Automatic inventory refresh due");
+    requestInventoryRefresh();
+}
 
 void spoolUpdateTask(void *parameter)
 {
@@ -493,6 +519,7 @@ void setup()
             ui_scale_set_disconnected();
         }
     }
+    lastInventoryRefreshStartedMs = millis();
     Serial.println("[STARTUP] Setup complete");
 }
 
@@ -501,6 +528,7 @@ void loop()
     pt_loop_display();
     processSpoolUpdateResult();
     processInventoryRefreshResult();
+    processAutomaticInventoryRefresh();
     ui_spools_tick_refresh_status();
     if (scaleMutex != nullptr && scaleTaskHandle != nullptr)
         updateScaleDisplay();
