@@ -21,6 +21,20 @@ static lv_obj_t *ui_scale_tare_button = nullptr;
 static lv_obj_t *ui_scale_measured_filament = nullptr;
 static lv_obj_t *ui_scale_weight_difference = nullptr;
 static lv_obj_t *ui_scale_update_button = nullptr;
+static lv_obj_t *ui_scale_stability_label = nullptr;
+static bool ui_scale_weight_stable = false;
+inline void ui_scale_refresh_update_button();
+inline void ui_scale_set_stability(bool stable)
+{
+    if (ui_scale_weight_stable == stable) return;
+    ui_scale_weight_stable = stable;
+    if (ui_scale_stability_label != nullptr) {
+        lv_label_set_text(ui_scale_stability_label, stable ? "STABLE" : "STABILISING");
+        lv_obj_set_style_text_color(ui_scale_stability_label,
+            lv_color_hex(stable ? 0x4FD29A : 0xE4B45C), LV_PART_MAIN);
+    }
+    ui_scale_refresh_update_button();
+}
 static lv_obj_t *ui_scale_confirm_overlay = nullptr;
 static int ui_scale_pending_spool_id = 0;
 static float ui_scale_pending_remaining = 0.0f;
@@ -57,7 +71,7 @@ inline lv_obj_t *ui_scale_create_value(lv_obj_t *parent, int x, int y, int width
 inline bool ui_scale_get_update_candidate(int &spool_id, float &old_weight, float &new_weight)
 {
     if (!ui_scale_has_selected_spool || ui_scale_selected_spool_index >= spool_count ||
-        !ui_scale_live_weight_valid)
+        !ui_scale_live_weight_valid || !ui_scale_weight_stable)
         return false;
 
     const SpoolInfo &spool = spool_store[ui_scale_selected_spool_index];
@@ -108,6 +122,11 @@ inline void ui_scale_confirm_live(lv_event_t *event)
     // The confirmation dialog has frozen the spool ID and measured weight.
     const int id = ui_scale_pending_spool_id;
     const float grams = ui_scale_pending_remaining;
+    // If the reading became unstable while the dialog was open, do not write.
+    if (!ui_scale_weight_stable || !ui_scale_live_weight_valid) {
+        ui_scale_close_confirmation(nullptr);
+        return;
+    }
     ui_scale_close_confirmation(nullptr);
     ui_scale_update_busy = true;
     ui_scale_refresh_update_button();
@@ -158,7 +177,7 @@ inline void ui_scale_open_confirmation(lv_event_t *event)
     float old_weight = 0.0f, new_weight = 0.0f;
     if (!ui_scale_get_update_candidate(id, old_weight, new_weight)) return;
 
-    if (ui_scale_update_busy || ui_scale_update_callback == nullptr) return;
+    if (ui_scale_update_busy || ui_scale_update_callback == nullptr || !ui_scale_weight_stable) return;
     ui_scale_pending_spool_id = id;
     ui_scale_pending_remaining = new_weight;
 
@@ -429,6 +448,11 @@ inline lv_obj_t *ui_scale_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(ui_scale_weight, &lv_font_montserrat_18, LV_PART_MAIN);
     lv_obj_align(ui_scale_weight, LV_ALIGN_CENTER, 0, -20);
 
+    ui_scale_stability_label = lv_label_create(scale_panel);
+    lv_label_set_text(ui_scale_stability_label, "STABILISING");
+    lv_obj_set_style_text_color(ui_scale_stability_label, lv_color_hex(0xE4B45C), LV_PART_MAIN);
+    lv_obj_align(ui_scale_stability_label, LV_ALIGN_CENTER, 0, 62);
+
     ui_scale_status = lv_label_create(scale_panel);
     lv_label_set_text(ui_scale_status, "Waiting for scale");
     lv_obj_set_style_text_color(ui_scale_status, lv_color_hex(0xA0A8B0), LV_PART_MAIN);
@@ -439,19 +463,19 @@ inline lv_obj_t *ui_scale_create(lv_obj_t *parent)
     lv_obj_set_size(ui_scale_tare_button, 180, 42);
     lv_obj_align(ui_scale_tare_button, LV_ALIGN_BOTTOM_RIGHT, -20, 0);
     lv_obj_set_style_bg_color(ui_scale_tare_button, lv_color_hex(0x394650), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(ui_scale_tare_button, lv_color_hex(0x3A3126), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(ui_scale_tare_button, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_color(ui_scale_tare_button, lv_color_hex(0x252D34), LV_PART_MAIN | LV_STATE_DISABLED);
     lv_obj_set_style_bg_opa(ui_scale_tare_button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ui_scale_tare_button, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DISABLED);
     lv_obj_set_style_text_color(ui_scale_tare_button, lv_color_white(), LV_PART_MAIN);
-    lv_obj_set_style_text_color(ui_scale_tare_button, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_set_style_text_color(ui_scale_tare_button, lv_color_hex(0x7D8993), LV_PART_MAIN | LV_STATE_DISABLED);
     lv_obj_set_style_shadow_width(ui_scale_tare_button, 0, LV_PART_MAIN);
 
     lv_obj_t *tare_label = lv_label_create(ui_scale_tare_button);
     lv_label_set_text(tare_label, "TARE");
     lv_obj_center(tare_label);
     lv_obj_set_style_text_color(tare_label, lv_color_white(), LV_PART_MAIN);
-    lv_obj_set_style_text_color(tare_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_set_style_text_color(tare_label, lv_color_hex(0x7D8993), LV_PART_MAIN | LV_STATE_DISABLED);
     lv_obj_add_state(ui_scale_tare_button, LV_STATE_DISABLED);
     lv_obj_add_state(tare_label, LV_STATE_DISABLED);
 

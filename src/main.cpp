@@ -17,6 +17,10 @@ constexpr uint32_t SCALE_POLL_INTERVAL_MS = 500;
 constexpr uint32_t SCALE_HTTP_TIMEOUT_MS = 1500;
 constexpr uint8_t MAX_FAILED_POLLS = 3;
 constexpr uint32_t TARE_MESSAGE_DURATION_MS = 2000;
+// Stage 4: a full two-second window of valid raw readings within +/-1 g.
+constexpr uint32_t SCALE_STABLE_WINDOW_MS = 2000;
+constexpr float SCALE_STABLE_TOLERANCE_G = 1.0f;
+constexpr uint8_t SCALE_STABLE_SAMPLES = 5;
 
 // Stage 3B: the network worker never calls LVGL or edits spool_store.
 struct SpoolUpdateState {
@@ -99,11 +103,12 @@ enum class TareState : uint8_t { Idle, Pending, Running, Success, Failed };
 struct ScaleReading {
     float grams;
     bool connected;
+    bool stable;
     uint32_t sequence;
     TareState tareState;
 };
 
-ScaleReading scaleReading = {0.0f, false, 0, TareState::Idle};
+ScaleReading scaleReading = {0.0f, false, false, 0, TareState::Idle};
 SemaphoreHandle_t scaleMutex = nullptr;
 TaskHandle_t scaleTaskHandle = nullptr;
 
@@ -113,6 +118,7 @@ void requestScaleTare()
     if (xSemaphoreTake(scaleMutex, 0) != pdTRUE) return;
     if (scaleReading.connected && scaleReading.tareState == TareState::Idle) {
         scaleReading.tareState = TareState::Pending;
+        scaleReading.stable = false;
         scaleReading.sequence++;
         Serial.println("[SCALE] TARE queued");
     }
@@ -121,7 +127,9 @@ void requestScaleTare()
 
 void scalePollingTask(void* parameter)
 {
-    uint32_t sequence = 0;
+    float stableWeights[SCALE_STABLE_SAMPLES] = {};
+    uint32_t stableTimes[SCALE_STABLE_SAMPLES] = {};
+    uint8_t stableCount = 0;
     uint8_t failedPolls = 0;
     bool lastKnownConnected = false;
     float lastKnownGrams = 0.0f;
@@ -137,6 +145,7 @@ void scalePollingTask(void* parameter)
         }
 
         if (doTare) {
+            stableCount = 0;
             bool success = false;
             if (WiFi.status() == WL_CONNECTED) {
                 HTTPClient http;
@@ -185,6 +194,30 @@ void scalePollingTask(void* parameter)
             }
         }
 
+        // Never reuse a previous measurement for stability after a failed poll.
+        if (!connected || doTare) stableCount = 0;
+        bool stable = false;
+        if (connected && !doTare) {
+            if (stableCount == SCALE_STABLE_SAMPLES) {
+                for (uint8_t i = 1; i < SCALE_STABLE_SAMPLES; ++i) {
+                    stableWeights[i - 1] = stableWeights[i];
+                    stableTimes[i - 1] = stableTimes[i];
+                }
+                --stableCount;
+            }
+            stableWeights[stableCount] = grams;
+            stableTimes[stableCount] = millis();
+            ++stableCount;
+            if (stableCount == SCALE_STABLE_SAMPLES &&
+                (uint32_t)(stableTimes[stableCount - 1] - stableTimes[0]) >= SCALE_STABLE_WINDOW_MS) {
+                float lo = stableWeights[0], hi = stableWeights[0];
+                for (uint8_t i = 1; i < stableCount; ++i) {
+                    if (stableWeights[i] < lo) lo = stableWeights[i];
+                    if (stableWeights[i] > hi) hi = stableWeights[i];
+                }
+                stable = (hi - lo) <= (2.0f * SCALE_STABLE_TOLERANCE_G);
+            }
+        }
         if (connected) {
             failedPolls = 0;
             lastKnownConnected = true;
@@ -197,7 +230,9 @@ void scalePollingTask(void* parameter)
         if (xSemaphoreTake(scaleMutex, portMAX_DELAY) == pdTRUE) {
             scaleReading.grams = lastKnownGrams;
             scaleReading.connected = lastKnownConnected;
-            scaleReading.sequence = ++sequence;
+            scaleReading.stable = lastKnownConnected && connected && stable &&
+                                  scaleReading.tareState == TareState::Idle;
+            ++scaleReading.sequence;
             xSemaphoreGive(scaleMutex);
         }
         vTaskDelay(pdMS_TO_TICKS(SCALE_POLL_INTERVAL_MS));
@@ -213,6 +248,7 @@ void updateScaleDisplay()
     static char lastWeightText[32] = "";
     static bool lastButtonEnabled = false;
     static bool lastConnected = false;
+    static bool lastStable = false;
 
     ScaleReading reading;
     if (xSemaphoreTake(scaleMutex, 0) != pdTRUE) return;
@@ -236,10 +272,13 @@ void updateScaleDisplay()
             strncpy(lastWeightText, weightText, sizeof(lastWeightText) - 1);
             lastWeightText[sizeof(lastWeightText) - 1] = '\0';
         }
-        if (weightChanged || connectionChanged) {
+        const bool stabilityChanged = reading.stable != lastStable;
+        if (weightChanged || connectionChanged || stabilityChanged) {
             // Stage 2: calculate net filament on the UI thread only.
             ui_scale_sync_calculation_from_display(reading.connected, reading.grams);
+            ui_scale_set_stability(reading.stable);
             lastConnected = reading.connected;
+            lastStable = reading.stable;
         }
 
         const bool tareBusy = (reading.tareState == TareState::Pending ||
