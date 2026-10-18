@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include <stdio.h>
+#include <string.h>
 
 #include "../models/spool_store.h"
 
@@ -25,6 +26,38 @@ static lv_obj_t *ui_spool_search_input = nullptr;
 static lv_obj_t *ui_spool_search_keyboard = nullptr;
 
 static lv_obj_t *ui_spool_search_clear = nullptr;
+static lv_obj_t *ui_spool_refresh_button = nullptr;
+static lv_obj_t *ui_spool_refresh_label = nullptr;
+static uint32_t ui_spool_refresh_status_until = 0;
+typedef void (*UiSpoolsRefreshCallback)();
+static UiSpoolsRefreshCallback ui_spools_refresh_callback = nullptr;
+inline void ui_spools_set_refresh_callback(UiSpoolsRefreshCallback callback) {
+    ui_spools_refresh_callback = callback;
+}
+inline void ui_spools_set_refresh_status(bool busy, const char *message) {
+    if (ui_spool_refresh_button) {
+        if (busy) lv_obj_add_state(ui_spool_refresh_button, LV_STATE_DISABLED);
+        else lv_obj_remove_state(ui_spool_refresh_button, LV_STATE_DISABLED);
+    }
+    if (ui_spool_refresh_label) {
+        const bool failed = message && (strstr(message, "failed") || strstr(message, "error") || strstr(message, "Could not") || strstr(message, "disconnected") || strstr(message, "exceeds"));
+        const bool completed = message && strcmp(message, "Inventory refreshed") == 0;
+        lv_label_set_text(ui_spool_refresh_label, busy ? "..." : failed ? "ERR" : completed ? "OK" : LV_SYMBOL_REFRESH);
+        ui_spool_refresh_status_until = (failed || completed) ? millis() + 3000 : 0;
+    }
+    if (message && message[0]) Serial.printf("[SPOOLMAN] %s\n", message);
+}
+inline void ui_spools_tick_refresh_status() {
+    if (ui_spool_refresh_label && ui_spool_refresh_status_until &&
+        (int32_t)(millis() - ui_spool_refresh_status_until) >= 0) {
+        lv_label_set_text(ui_spool_refresh_label, LV_SYMBOL_REFRESH);
+        ui_spool_refresh_status_until = 0;
+    }
+}
+inline void ui_spools_refresh_clicked_cb(lv_event_t *event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && ui_spools_refresh_callback)
+        ui_spools_refresh_callback();
+}
 
 typedef void (*UiSpoolUseOnScaleCallback)(size_t spool_index);
 
@@ -350,7 +383,7 @@ inline void ui_spool_style_button(lv_obj_t *button)
 
 inline void ui_spools_refresh_rows();
 
-inline void ui_spools_rebuild_filter()
+inline void ui_spools_rebuild_filter(bool preserve_page = false)
 
 {
 
@@ -388,7 +421,10 @@ inline void ui_spools_rebuild_filter()
 
     }
 
-    ui_spool_first_index = 0;
+    if (!preserve_page) ui_spool_first_index = 0;
+    else if (ui_spool_filtered_count == 0) ui_spool_first_index = 0;
+    else if (ui_spool_first_index >= ui_spool_filtered_count)
+        ui_spool_first_index = ((ui_spool_filtered_count - 1) / SPOOL_ROWS_VISIBLE) * SPOOL_ROWS_VISIBLE;
 
     ui_spools_refresh_rows();
 
@@ -536,7 +572,7 @@ inline void ui_spools_refresh_rows()
 
     {
 
-        ui_spools_rebuild_filter();
+        ui_spools_rebuild_filter(true);
 
         return;
 
@@ -628,6 +664,16 @@ inline void ui_spools_refresh_rows()
 
 }
 
+inline void ui_spool_refresh_detail();
+inline void ui_spool_show_list_view();
+inline void ui_spools_inventory_replaced() {
+    ui_spools_rebuild_filter(true);
+    if (ui_spool_detail_view && !lv_obj_has_flag(ui_spool_detail_view, LV_OBJ_FLAG_HIDDEN)) {
+        if (ui_spool_selected_index < spool_count) ui_spool_refresh_detail();
+        else ui_spool_show_list_view();
+    }
+}
+
 inline void ui_spool_refresh_detail()
 
 {
@@ -677,6 +723,7 @@ inline void ui_spool_show_list_view()
     lv_obj_remove_flag(ui_spool_list_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ui_spool_search_input, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ui_spool_search_clear, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(ui_spool_refresh_button, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_remove_flag(ui_spool_page_label, LV_OBJ_FLAG_HIDDEN);
 
@@ -704,6 +751,7 @@ inline void ui_spool_show_detail_view(size_t spool_index)
     lv_obj_add_flag(ui_spool_list_view, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(ui_spool_search_input, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(ui_spool_search_clear, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_spool_refresh_button, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_flag(ui_spool_page_label, LV_OBJ_FLAG_HIDDEN);
 
@@ -902,6 +950,16 @@ inline lv_obj_t *ui_spools_create(lv_obj_t *parent)
     lv_label_set_text(clear_label, "X");
 
     lv_obj_center(clear_label);
+
+    // Compact refresh button fits between search-clear and page count.
+    ui_spool_refresh_button = lv_button_create(page);
+    ui_spool_style_button(ui_spool_refresh_button);
+    lv_obj_set_size(ui_spool_refresh_button, 48, 30);
+    lv_obj_align(ui_spool_refresh_button, LV_ALIGN_TOP_LEFT, 605, -9);
+    lv_obj_add_event_cb(ui_spool_refresh_button, ui_spools_refresh_clicked_cb, LV_EVENT_CLICKED, nullptr);
+    ui_spool_refresh_label = lv_label_create(ui_spool_refresh_button);
+    lv_label_set_text(ui_spool_refresh_label, LV_SYMBOL_REFRESH);
+    lv_obj_center(ui_spool_refresh_label);
 
     ui_spool_list_view = lv_obj_create(page);
 

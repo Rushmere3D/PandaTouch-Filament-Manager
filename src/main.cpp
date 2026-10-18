@@ -4,12 +4,14 @@
 #include <WiFi.h>
 #include <math.h>
 #include <cstring>
+#include <new>
 #include "pt/pt_display.h"
 #include "ui_main.h"
 #include "ui/ui_scale.h"
 #include "network/wifi_manager.h"
 #include "network/spoolman_client.h"
 #include "network/spoolman_update.h"
+#include "network/spoolman_refresh.h"
 
 const char* SCALE_URL = "http://192.168.1.222/api/weight";
 const char* SCALE_TARE_URL = "http://192.168.1.222/api/tare";
@@ -33,6 +35,110 @@ struct SpoolUpdateState {
 };
 static SpoolUpdateState spoolUpdate;
 static SemaphoreHandle_t spoolUpdateMutex = nullptr;
+
+// Stage 5A: a separate snapshot is fetched in a background task and applied on the UI thread.
+struct InventoryRefreshState {
+    bool busy = false;
+    bool finished = false;
+    bool success = false;
+    SpoolInfo *snapshot = nullptr;
+    size_t count = 0;
+    char message[128] = {};
+};
+static InventoryRefreshState inventoryRefresh;
+static SemaphoreHandle_t inventoryRefreshMutex = nullptr;
+
+void inventoryRefreshTask(void *parameter) {
+    (void)parameter;
+    SpoolInfo *items = new (std::nothrow) SpoolInfo[MAX_SPOOLS];
+    size_t count = 0;
+    String error;
+    bool success = items && spoolman_fetch_inventory_snapshot(items, count, error);
+    if (!items) error = "Not enough memory for inventory";
+    if (!success) { delete[] items; items = nullptr; }
+    xSemaphoreTake(inventoryRefreshMutex, portMAX_DELAY);
+    inventoryRefresh.snapshot = items;
+    inventoryRefresh.count = count;
+    inventoryRefresh.success = success;
+    snprintf(inventoryRefresh.message, sizeof(inventoryRefresh.message), "%s",
+             success ? "Inventory refreshed" : error.c_str());
+    inventoryRefresh.finished = true;
+    xSemaphoreGive(inventoryRefreshMutex);
+    vTaskDelete(nullptr);
+}
+
+void requestInventoryRefresh() {
+    if (!inventoryRefreshMutex || !spoolUpdateMutex) return;
+    // Both callbacks run on the UI thread; prevent concurrent writes and refreshes.
+    xSemaphoreTake(spoolUpdateMutex, portMAX_DELAY);
+    const bool updating = spoolUpdate.busy;
+    xSemaphoreGive(spoolUpdateMutex);
+    if (updating) { ui_spools_set_refresh_status(false, "Wait for the spool update to finish"); return; }
+    xSemaphoreTake(inventoryRefreshMutex, portMAX_DELAY);
+    if (inventoryRefresh.busy) { xSemaphoreGive(inventoryRefreshMutex); return; }
+    inventoryRefresh.busy = true;
+    inventoryRefresh.finished = false;
+    xSemaphoreGive(inventoryRefreshMutex);
+    ui_spools_set_refresh_status(true, "Refreshing inventory...");
+    if (xTaskCreatePinnedToCore(inventoryRefreshTask, "InventoryRefresh", 12288,
+                                nullptr, 1, nullptr, 0) != pdPASS) {
+        xSemaphoreTake(inventoryRefreshMutex, portMAX_DELAY);
+        inventoryRefresh.busy = false;
+        xSemaphoreGive(inventoryRefreshMutex);
+        ui_spools_set_refresh_status(false, "Could not start refresh task");
+    }
+}
+
+void processInventoryRefreshResult() {
+    if (!inventoryRefreshMutex) return;
+    InventoryRefreshState result;
+    bool ready = false;
+    if (xSemaphoreTake(inventoryRefreshMutex, 0) == pdTRUE) {
+        if (inventoryRefresh.finished) {
+            result = inventoryRefresh;
+            inventoryRefresh.finished = false;
+            inventoryRefresh.snapshot = nullptr;
+            ready = true;
+        }
+        xSemaphoreGive(inventoryRefreshMutex);
+    }
+    if (!ready) return;
+    if (result.success && result.snapshot) {
+        // IDs survive reordering. Never use old array indices after replacement.
+        const int selectedScaleId = ui_scale_has_selected_spool &&
+            ui_scale_selected_spool_index < spool_count ?
+            spool_store[ui_scale_selected_spool_index].id : -1;
+        const int selectedDetailId = ui_spool_selected_index < spool_count ?
+            spool_store[ui_spool_selected_index].id : -1;
+        for (size_t i = 0; i < result.count; ++i) spool_store[i] = result.snapshot[i];
+        spool_count = result.count;
+        ui_scale_has_selected_spool = false;
+        bool detailFound = false;
+        for (size_t i = 0; i < spool_count; ++i) {
+            if (spool_store[i].id == selectedScaleId) {
+                ui_scale_selected_spool_index = i;
+                ui_scale_has_selected_spool = true;
+            }
+            if (spool_store[i].id == selectedDetailId) {
+                ui_spool_selected_index = i;
+                detailFound = true;
+            }
+        }
+        if (!detailFound) ui_spool_selected_index = spool_count;
+        ui_scale_refresh_selected_spool();
+        ui_spools_inventory_replaced();
+        Serial.printf("[SPOOLMAN] Refresh successful: %u spools\n", (unsigned)spool_count);
+    } else {
+        Serial.printf("[SPOOLMAN] Refresh failed: %s\n", result.message);
+    }
+    delete[] result.snapshot;
+    ui_spools_set_refresh_status(false, result.message);
+    xSemaphoreTake(inventoryRefreshMutex, portMAX_DELAY);
+    inventoryRefresh.busy = false;
+    xSemaphoreGive(inventoryRefreshMutex);
+}
+
+
 
 void spoolUpdateTask(void *parameter)
 {
@@ -60,6 +166,12 @@ void spoolUpdateTask(void *parameter)
 void requestSpoolUpdate(int id, float grams)
 {
     if (spoolUpdateMutex == nullptr || id <= 0 || !isfinite(grams) || grams < 0) return;
+    if (inventoryRefreshMutex) {
+        xSemaphoreTake(inventoryRefreshMutex, portMAX_DELAY);
+        const bool refreshing = inventoryRefresh.busy;
+        xSemaphoreGive(inventoryRefreshMutex);
+        if (refreshing) { Serial.println("[SPOOLMAN] Update blocked during inventory refresh"); return; }
+    }
     xSemaphoreTake(spoolUpdateMutex, portMAX_DELAY);
     if (spoolUpdate.busy) { xSemaphoreGive(spoolUpdateMutex); return; }
     spoolUpdate.busy = true;
@@ -364,6 +476,8 @@ void setup()
     ui_create_main();
     ui_scale_set_tare_callback(requestScaleTare);
     spoolUpdateMutex = xSemaphoreCreateMutex();
+    inventoryRefreshMutex = xSemaphoreCreateMutex();
+    if (inventoryRefreshMutex) ui_spools_set_refresh_callback(requestInventoryRefresh);
     if (spoolUpdateMutex) ui_scale_set_update_callback(requestSpoolUpdate);
     scaleMutex = xSemaphoreCreateMutex();
     if (scaleMutex == nullptr) {
@@ -386,6 +500,8 @@ void loop()
 {
     pt_loop_display();
     processSpoolUpdateResult();
+    processInventoryRefreshResult();
+    ui_spools_tick_refresh_status();
     if (scaleMutex != nullptr && scaleTaskHandle != nullptr)
         updateScaleDisplay();
 }
