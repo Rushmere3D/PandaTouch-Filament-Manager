@@ -130,6 +130,7 @@ static lv_obj_t *ui_cal_overlay = nullptr;
 static lv_obj_t *ui_cal_live_weight = nullptr;
 static lv_obj_t *ui_cal_live_stability = nullptr;
 static bool ui_cal_busy = false;
+static lv_obj_t *ui_cal_close_button = nullptr;
 static bool ui_cal_connected = false;
 static bool ui_cal_stable = false;
 static bool ui_cal_tared = false;
@@ -149,6 +150,10 @@ inline void ui_settings_set_calibration_callbacks(void (*tareCb)(), void (*start
 
 static inline void ui_settings_calibration_refresh_buttons()
 {
+    if (ui_cal_close_button) {
+        if (ui_cal_busy) lv_obj_add_state(ui_cal_close_button, LV_STATE_DISABLED);
+        else lv_obj_remove_state(ui_cal_close_button, LV_STATE_DISABLED);
+    }
     if (ui_cal_tare_button) {
         if (ui_cal_busy || !ui_cal_connected)
             lv_obj_add_state(ui_cal_tare_button, LV_STATE_DISABLED);
@@ -183,8 +188,8 @@ inline void ui_settings_calibration_live_reading(bool connected, float grams,
     ui_cal_stable = connected && stable && !tareBusy;
     if (ui_cal_live_weight) {
         char weight[48];
-        if (connected) snprintf(weight, sizeof(weight), "Live weight: %.1f g", (double)grams);
-        else snprintf(weight, sizeof(weight), "Live weight: -- g");
+        if (connected) snprintf(weight, sizeof(weight), "%.1f g", (double)grams);
+        else snprintf(weight, sizeof(weight), "-- g");
         lv_label_set_text(ui_cal_live_weight, weight);
     }
     if (ui_cal_live_stability) {
@@ -198,6 +203,7 @@ inline void ui_settings_calibration_live_reading(bool connected, float grams,
 
 static void ui_cal_close_cb(lv_event_t *)
 {
+    if (ui_cal_busy) return;
     if (ui_cal_overlay) lv_obj_add_flag(ui_cal_overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -219,74 +225,102 @@ static void ui_cal_start_cb(lv_event_t *)
     ui_cal_start_callback(ui_cal_weights[selected]);
 }
 
+// Stage 6D styled wizard. Existing calibration callbacks remain unchanged.
+static lv_obj_t *ui_cal_make_text(lv_obj_t *parent, const char *text, int x, int y, uint32_t color)
+{
+    lv_obj_t *label = lv_label_create(parent);
+    lv_label_set_text(label, text);
+    lv_obj_set_style_text_color(label, lv_color_hex(color), LV_PART_MAIN);
+    lv_obj_set_pos(label, x, y);
+    return label;
+}
+
+static void ui_cal_style_action(lv_obj_t *button, bool primary)
+{
+    lv_obj_set_style_bg_color(button, lv_color_hex(primary ? 0x3A3126 : 0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x4B5B68), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(button, 8, LV_PART_MAIN);
+    lv_obj_set_style_text_color(button, lv_color_white(), LV_PART_MAIN);
+}
+
 static void ui_cal_open_cb(lv_event_t *)
 {
     if (!ui_cal_overlay) {
         ui_cal_overlay = lv_obj_create(lv_layer_top());
         lv_obj_set_size(ui_cal_overlay, 690, 385);
         lv_obj_center(ui_cal_overlay);
-        lv_obj_set_style_bg_color(ui_cal_overlay, lv_color_hex(0x202830), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(ui_cal_overlay, lv_color_hex(0x101418), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(ui_cal_overlay, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(ui_cal_overlay, 2, LV_PART_MAIN);
-        lv_obj_set_style_border_color(ui_cal_overlay, lv_color_hex(0x708090), LV_PART_MAIN);
+        lv_obj_set_style_border_color(ui_cal_overlay, lv_color_hex(0x394650), LV_PART_MAIN);
+        lv_obj_set_style_radius(ui_cal_overlay, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(ui_cal_overlay, 0, LV_PART_MAIN);
         lv_obj_clear_flag(ui_cal_overlay, LV_OBJ_FLAG_SCROLLABLE);
 
-        lv_obj_t *heading = lv_label_create(ui_cal_overlay);
-        lv_label_set_text(heading, "Scale calibration");
-        lv_obj_set_style_text_color(heading, lv_color_white(), LV_PART_MAIN);
-        lv_obj_set_pos(heading, 20, 12);
+        ui_cal_make_text(ui_cal_overlay, "SCALE CALIBRATION", 22, 14, 0xFFFFFF);
+        ui_cal_make_text(ui_cal_overlay, "Follow the three steps below", 22, 40, 0xB0B8C0);
 
-        lv_obj_t *instructions = lv_label_create(ui_cal_overlay);
-        lv_label_set_text(instructions,
-            "1. Remove all weight, then press TARE.\n"
-            "2. Place your known weight on the scale.\n"
-            "3. Wait for a stable reading, then press CALIBRATE.");
-        lv_obj_set_style_text_color(instructions, lv_color_white(), LV_PART_MAIN);
-        lv_obj_set_pos(instructions, 20, 54);
+        lv_obj_t *panel = lv_obj_create(ui_cal_overlay);
+        lv_obj_set_size(panel, 642, 80);
+        lv_obj_set_pos(panel, 22, 69);
+        lv_obj_set_style_bg_color(panel, lv_color_hex(0x202830), LV_PART_MAIN);
+        lv_obj_set_style_border_width(panel, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(panel, 8, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN);
+        lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+        ui_cal_make_text(panel, "LIVE WEIGHT", 14, 8, 0xB0B8C0);
+        ui_cal_live_weight = ui_cal_make_text(panel, "-- g", 14, 35, 0xFFFFFF);
+        ui_cal_live_stability = ui_cal_make_text(panel, "DISCONNECTED", 405, 35, 0xFFD080);
 
-        ui_cal_live_weight = lv_label_create(ui_cal_overlay);
-        lv_label_set_text(ui_cal_live_weight, "Live weight: -- g");
-        lv_obj_set_style_text_color(ui_cal_live_weight, lv_color_white(), LV_PART_MAIN);
-        lv_obj_set_pos(ui_cal_live_weight, 20, 124);
-
-        ui_cal_live_stability = lv_label_create(ui_cal_overlay);
-        lv_label_set_text(ui_cal_live_stability, "DISCONNECTED");
-        lv_obj_set_style_text_color(ui_cal_live_stability, lv_color_hex(0xFFD080), LV_PART_MAIN);
-        lv_obj_set_pos(ui_cal_live_stability, 310, 124);
-
+        ui_cal_make_text(ui_cal_overlay, "1  EMPTY SCALE", 22, 162, 0xFFFFFF);
+        ui_cal_make_text(ui_cal_overlay, "Remove weight, then tare", 22, 186, 0xB0B8C0);
         ui_cal_tare_button = lv_button_create(ui_cal_overlay);
-        lv_obj_set_size(ui_cal_tare_button, 175, 50);
-        lv_obj_set_pos(ui_cal_tare_button, 20, 160);
+        lv_obj_set_size(ui_cal_tare_button, 184, 48);
+        lv_obj_set_pos(ui_cal_tare_button, 22, 216);
+        ui_cal_style_action(ui_cal_tare_button, false);
         lv_obj_add_event_cb(ui_cal_tare_button, ui_cal_tare_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t *tareText = lv_label_create(ui_cal_tare_button);
         lv_label_set_text(tareText, "TARE EMPTY");
         lv_obj_center(tareText);
 
+        ui_cal_make_text(ui_cal_overlay, "2  REFERENCE WEIGHT", 238, 162, 0xFFFFFF);
+        ui_cal_make_text(ui_cal_overlay, "Place known weight", 238, 186, 0xB0B8C0);
         ui_cal_weight_dropdown = lv_dropdown_create(ui_cal_overlay);
         lv_dropdown_set_options(ui_cal_weight_dropdown, "50 g\n100 g\n200 g\n500 g\n1000 g");
         lv_dropdown_set_selected(ui_cal_weight_dropdown, 2);
-        lv_obj_set_width(ui_cal_weight_dropdown, 145);
-        lv_obj_set_pos(ui_cal_weight_dropdown, 215, 160);
+        lv_obj_set_size(ui_cal_weight_dropdown, 180, 48);
+        lv_obj_set_pos(ui_cal_weight_dropdown, 238, 216);
+        ui_settings_style_dropdown(ui_cal_weight_dropdown);
 
+        ui_cal_make_text(ui_cal_overlay, "3  CALIBRATE", 450, 162, 0xFFFFFF);
+        ui_cal_make_text(ui_cal_overlay, "Wait for STABLE", 450, 186, 0xB0B8C0);
         ui_cal_start_button = lv_button_create(ui_cal_overlay);
-        lv_obj_set_size(ui_cal_start_button, 175, 50);
-        lv_obj_set_pos(ui_cal_start_button, 385, 160);
+        lv_obj_set_size(ui_cal_start_button, 214, 48);
+        lv_obj_set_pos(ui_cal_start_button, 450, 216);
+        ui_cal_style_action(ui_cal_start_button, true);
+        // Stage 6D.1: unified slate/pressed blue buttons (ui_cal_start_button)
+        lv_obj_set_style_bg_color(ui_cal_start_button, lv_color_hex(0x394650), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(ui_cal_start_button, lv_color_hex(0x3A3126), LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(ui_cal_start_button, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(ui_cal_start_button, 0, LV_PART_MAIN);
+        lv_obj_set_style_text_color(ui_cal_start_button, lv_color_white(), LV_PART_MAIN);
         lv_obj_add_event_cb(ui_cal_start_button, ui_cal_start_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t *startText = lv_label_create(ui_cal_start_button);
         lv_label_set_text(startText, "CALIBRATE");
         lv_obj_center(startText);
 
-        ui_cal_message = lv_label_create(ui_cal_overlay);
-        lv_obj_set_width(ui_cal_message, 630);
+        ui_cal_message = ui_cal_make_text(ui_cal_overlay, "", 22, 280, 0xB0B8C0);
+        lv_obj_set_width(ui_cal_message, 642);
         lv_label_set_long_mode(ui_cal_message, LV_LABEL_LONG_WRAP);
-        lv_obj_set_style_text_color(ui_cal_message, lv_color_white(), LV_PART_MAIN);
-        lv_obj_set_pos(ui_cal_message, 20, 245);
 
-        lv_obj_t *closeButton = lv_button_create(ui_cal_overlay);
-        lv_obj_set_size(closeButton, 140, 45);
-        lv_obj_set_pos(closeButton, 500, 305);
-        lv_obj_add_event_cb(closeButton, ui_cal_close_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t *closeText = lv_label_create(closeButton);
+        ui_cal_close_button = lv_button_create(ui_cal_overlay);
+        lv_obj_set_size(ui_cal_close_button, 144, 42);
+        lv_obj_set_pos(ui_cal_close_button, 520, 327);
+        ui_cal_style_action(ui_cal_close_button, false);
+        lv_obj_add_event_cb(ui_cal_close_button, ui_cal_close_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t *closeText = lv_label_create(ui_cal_close_button);
         lv_label_set_text(closeText, "CLOSE");
         lv_obj_center(closeText);
     }
@@ -448,6 +482,12 @@ inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
     lv_obj_t *calButton = lv_button_create(page);
     lv_obj_set_size(calButton, 245, 48);
     lv_obj_set_pos(calButton, 20, 435);
+    // Stage 6D.1: unified slate/pressed blue buttons (calButton)
+    lv_obj_set_style_bg_color(calButton, lv_color_hex(0x394650), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(calButton, lv_color_hex(0x3A3126), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(calButton, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(calButton, 0, LV_PART_MAIN);
+    lv_obj_set_style_text_color(calButton, lv_color_white(), LV_PART_MAIN);
     lv_obj_add_event_cb(calButton, ui_cal_open_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t *calLabel = lv_label_create(calButton);
     lv_label_set_text(calLabel, "CALIBRATE SCALE");
