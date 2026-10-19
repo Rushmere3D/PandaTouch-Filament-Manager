@@ -4,23 +4,31 @@ Custom touchscreen firmware for the BIGTREETECH Panda Touch V1.0, designed to ma
 
 > **Project status: Work in progress — tested on Panda Touch hardware through Stage 5B.** Inventory browsing, scale readings, remote tare, weight calculations, confirmed Spoolman weight updates, and manual/automatic inventory refresh are working in the development setup. Calibration from the Panda Touch and an on-device network setup wizard are **not implemented yet**.
 
-Features
+**Features**
 
 Working on hardware
 
-Spoolman inventory
+**Spoolman inventory**
 
 • Connects to Wi-Fi and retrieves filament inventory from a Spoolman server.
+
 • Displays spool vendor, material, name, remaining weight and colour.
+
 • Supports single-colour, transparent and multi-colour spool swatches.
+
 • Searches inventory by vendor, filament name, material or Spoolman spool ID.
+
 • Paginates inventory four spools at a time, with first, previous, next and last controls.
+
 • Opens a detail view showing remaining weight, initial weight, empty-spool weight, location and Spoolman ID.
+
 • Provides a compact refresh icon for manual inventory synchronisation.
+
 • Automatically refreshes inventory approximately every 60 seconds, without blocking touchscreen interaction.
+
 • Retains the existing inventory if refresh fails, and preserves the search, page and selected spool across refreshes.
 
-Wi-Fi filament scale
+**Wi-Fi filament scale**
 
 • Receives live gross-weight readings from a separate ESP32 controller connected to an HX711 and load cell.
 • Offers TARE from the Panda Touch using the scale’s HTTP API.
@@ -52,13 +60,38 @@ Touchscreen controller
 • Built-in 800 × 480 RGB LCD and GT911 capacitive touchscreen.
 • 2.4 GHz Wi-Fi access to a reachable Spoolman server and the scale controller.
 
-Separate scale controller (current development setup)
+ESP32 Filament Scale firmware
 
 • ESP32-WROOM-32 development board.
 • HX711 load-cell amplifier and a suitable load cell.
 • HX711 DOUT → GPIO16, SCK → GPIO17 on the scale ESP32 in the tested setup.
 • The scale runs its own firmware and exposes weight and tare endpoints over Wi-Fi.
 • Calibration is stored on the scale controller, not on the Panda Touch.
+
+The filament scale is a separate ESP32-based device that communicates with Panda Touch Filament Manager over Wi-Fi.
+
+**Scale firmware repository:** [Rushmere3D/ESP32-Filament-Scale](https://github.com/Rushmere3D/ESP32-Filament-Scale)
+
+The scale repository includes:
+
+- ESP32 firmware and PlatformIO configuration
+- ESP32-to-HX711 wiring instructions
+- Initial tare and calibration procedures
+- Wi-Fi configuration instructions
+- HTTP API documentation for weight readings and remote tare
+
+### Installation
+
+1. Follow the instructions in the [ESP32 Filament Scale README](https://github.com/Rushmere3D/ESP32-Filament-Scale).
+2. Configure the scale's Wi-Fi credentials locally.
+3. Build and upload the scale firmware using PlatformIO.
+4. Calibrate the scale using its serial commands.
+5. Note the IP address reported by the scale.
+6. Configure Panda Touch Filament Manager to use that IP address for its scale API.
+
+The Panda Touch and ESP32 scale must be able to communicate over the local network. Each device has its own firmware and must be flashed separately.
+
+**Note:** Remote calibration from the Panda Touch is planned for Stage 6. Until then, use the [scale calibration guide](https://github.com/Rushmere3D/ESP32-Filament-Scale/blob/main/docs/calibration.md).
 
 The Panda Touch and scale are two separate devices communicating over the local network. The scale is not connected directly to the Panda Touch’s GPIO or I²C connector.
 
@@ -186,8 +219,6 @@ include/
   lv_conf.h                    LVGL configuration
 platformio.ini                 Build environments and dependencies
 docs/                          Hardware references and documentation
-
-The separate scale ESP32 firmware is a distinct component. Its source and installation instructions should be documented alongside the project when prepared for distribution. File layout and implementation may change as development continues.
 
 Development milestones
 
