@@ -252,8 +252,121 @@ ScaleReading scaleReading = {0.0f, false, false, NAN, false, 0, TareState::Idle}
 SemaphoreHandle_t scaleMutex = nullptr;
 TaskHandle_t scaleTaskHandle = nullptr;
 
+// Stage 6C: calibration network worker, never calls LVGL.
+const char *SCALE_CALIBRATE_BASE_URL = "http://192.168.1.222/api/calibrate?grams=";
+struct CalibrationState {
+    bool busy = false;
+    bool finished = false;
+    bool success = false;
+    float grams = 0;
+    float factor = NAN;
+    char message[120] = {};
+};
+static CalibrationState calibrationState;
+static SemaphoreHandle_t calibrationMutex = nullptr;
+
+void calibrationTask(void *)
+{
+    float grams = 0;
+    xSemaphoreTake(calibrationMutex, portMAX_DELAY);
+    grams = calibrationState.grams;
+    xSemaphoreGive(calibrationMutex);
+
+    bool success = false;
+    float factor = NAN;
+    String error = "Calibration request failed";
+    if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        http.setTimeout(8000);
+        String url = String(SCALE_CALIBRATE_BASE_URL) + String(grams, 2);
+        if (http.begin(url)) {
+            int code = http.POST("");
+            if (code == HTTP_CODE_OK) {
+                JsonDocument doc;
+                if (!deserializeJson(doc, http.getString()) && doc["success"].as<bool>() &&
+                    doc["calibration"].is<float>()) {
+                    factor = doc["calibration"].as<float>();
+                    success = isfinite(factor);
+                }
+                if (!success) error = "Invalid calibration response";
+            } else {
+                error = String("HTTP error: ") + String(code);
+            }
+            http.end();
+        }
+    } else error = "Wi-Fi disconnected";
+
+    xSemaphoreTake(calibrationMutex, portMAX_DELAY);
+    calibrationState.success = success;
+    calibrationState.factor = factor;
+    snprintf(calibrationState.message, sizeof(calibrationState.message), "%s", error.c_str());
+    calibrationState.finished = true;
+    xSemaphoreGive(calibrationMutex);
+    vTaskDelete(nullptr);
+}
+
+void requestCalibration(float grams)
+{
+    if (!calibrationMutex || !scaleMutex || !isfinite(grams) || grams <= 0 || grams > 5000) return;
+    ScaleReading reading;
+    if (xSemaphoreTake(scaleMutex, 0) != pdTRUE) return;
+    reading = scaleReading;
+    xSemaphoreGive(scaleMutex);
+    if (!reading.connected || !reading.stable || reading.tareState != TareState::Idle) {
+        ui_settings_calibration_message("Scale must be connected, stable and not taring.", false);
+        return;
+    }
+    if (xSemaphoreTake(calibrationMutex, 0) != pdTRUE) return;
+    if (calibrationState.busy) {
+        xSemaphoreGive(calibrationMutex);
+        return;
+    }
+    calibrationState.busy = true;
+    calibrationState.finished = false;
+    calibrationState.grams = grams;
+    xSemaphoreGive(calibrationMutex);
+    ui_settings_calibration_message("Calibrating... please wait.", true);
+    if (xTaskCreatePinnedToCore(calibrationTask, "Calibration", 8192, nullptr, 1, nullptr, 0) != pdPASS) {
+        xSemaphoreTake(calibrationMutex, portMAX_DELAY);
+        calibrationState.busy = false;
+        xSemaphoreGive(calibrationMutex);
+        ui_settings_calibration_message("Could not start calibration task.", false);
+    }
+}
+
+void processCalibrationResult()
+{
+    if (!calibrationMutex) return;
+    CalibrationState result;
+    bool ready = false;
+    if (xSemaphoreTake(calibrationMutex, 0) == pdTRUE) {
+        if (calibrationState.finished) {
+            result = calibrationState;
+            calibrationState.finished = false;
+            calibrationState.busy = false;
+            ready = true;
+        }
+        xSemaphoreGive(calibrationMutex);
+    }
+    if (!ready) return;
+    char message[140];
+    if (result.success) {
+        snprintf(message, sizeof(message), "Success: %.4f counts/g. Remove weight and verify zero.",
+                 (double)result.factor);
+    } else {
+        snprintf(message, sizeof(message), "Failed: %s", result.message);
+    }
+    ui_settings_calibration_message(message, false);
+}
+
+
 void requestScaleTare()
 {
+    if (calibrationMutex && xSemaphoreTake(calibrationMutex, 0) == pdTRUE) {
+        const bool busy = calibrationState.busy;
+        xSemaphoreGive(calibrationMutex);
+        if (busy) return;
+    }
     if (scaleMutex == nullptr) return;
     if (xSemaphoreTake(scaleMutex, 0) != pdTRUE) return;
     if (scaleReading.connected && scaleReading.tareState == TareState::Idle) {
@@ -409,6 +522,10 @@ void updateScaleDisplay()
         // Stage 6A: scale information is rendered only on the LVGL thread.
         ui_settings_set_scale_info(reading.connected, SCALE_URL,
                                    reading.calibrationValid, reading.calibration);
+        // Stage 6C.1: feed the wizard from the existing polling/stability state.
+        ui_settings_calibration_live_reading(reading.connected, reading.grams,
+            reading.stable, reading.tareState == TareState::Pending ||
+                            reading.tareState == TareState::Running);
         char weightText[32];
         if (reading.connected)
             snprintf(weightText, sizeof(weightText), "%.0f g", reading.grams);
@@ -452,11 +569,13 @@ void updateScaleDisplay()
                     tareMessage = "Tare complete";
                     tareMessageUntil = now + TARE_MESSAGE_DURATION_MS;
                     Serial.println("[SCALE] Remote TARE successful");
+                    ui_settings_calibration_tare_complete(true);
                     break;
                 case TareState::Failed:
                     tareMessage = "Tare failed";
                     tareMessageUntil = now + TARE_MESSAGE_DURATION_MS;
                     Serial.println("[SCALE] Remote TARE failed");
+                    ui_settings_calibration_tare_complete(false);
                     break;
                 case TareState::Idle:
                     break;
@@ -491,6 +610,7 @@ void updateScaleDisplay()
         ui_scale_set_tare_status(desiredStatus);
 }
 
+
 void setup()
 {
     Serial.begin(115200);
@@ -514,6 +634,8 @@ void setup()
     Serial.println("[UI] Creating interface...");
     ui_create_main();
     ui_scale_set_tare_callback(requestScaleTare);
+    ui_settings_set_calibration_callbacks(requestScaleTare, requestCalibration);
+    calibrationMutex = xSemaphoreCreateMutex();
     spoolUpdateMutex = xSemaphoreCreateMutex();
     inventoryRefreshMutex = xSemaphoreCreateMutex();
     if (inventoryRefreshMutex) ui_spools_set_refresh_callback(requestInventoryRefresh);
@@ -539,6 +661,7 @@ void setup()
 void loop()
 {
     pt_loop_display();
+    processCalibrationResult();
     processSpoolUpdateResult();
     processInventoryRefreshResult();
     processAutomaticInventoryRefresh();
