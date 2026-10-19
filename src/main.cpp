@@ -242,11 +242,13 @@ struct ScaleReading {
     float grams;
     bool connected;
     bool stable;
+    float calibration;
+    bool calibrationValid;
     uint32_t sequence;
     TareState tareState;
 };
 
-ScaleReading scaleReading = {0.0f, false, false, 0, TareState::Idle};
+ScaleReading scaleReading = {0.0f, false, false, NAN, false, 0, TareState::Idle};
 SemaphoreHandle_t scaleMutex = nullptr;
 TaskHandle_t scaleTaskHandle = nullptr;
 
@@ -314,6 +316,8 @@ void scalePollingTask(void* parameter)
 
         float grams = 0.0f;
         bool connected = false;
+        float calibration = NAN;
+        bool calibrationValid = false;
         if (WiFi.status() == WL_CONNECTED) {
             HTTPClient http;
             http.setTimeout(SCALE_HTTP_TIMEOUT_MS);
@@ -326,6 +330,10 @@ void scalePollingTask(void* parameter)
                     if (!error && doc["weight"].is<float>()) {
                         grams = doc["weight"].as<float>();
                         connected = isfinite(grams);
+                        if (connected && doc["calibration"].is<float>()) {
+                            calibration = doc["calibration"].as<float>();
+                            calibrationValid = isfinite(calibration);
+                        }
                     }
                 }
                 http.end();
@@ -368,6 +376,8 @@ void scalePollingTask(void* parameter)
         if (xSemaphoreTake(scaleMutex, portMAX_DELAY) == pdTRUE) {
             scaleReading.grams = lastKnownGrams;
             scaleReading.connected = lastKnownConnected;
+            scaleReading.calibration = calibration;
+            scaleReading.calibrationValid = connected && calibrationValid;
             scaleReading.stable = lastKnownConnected && connected && stable &&
                                   scaleReading.tareState == TareState::Idle;
             ++scaleReading.sequence;
@@ -396,6 +406,9 @@ void updateScaleDisplay()
     const uint32_t now = millis();
     if (reading.sequence != lastSequence) {
         lastSequence = reading.sequence;
+        // Stage 6A: scale information is rendered only on the LVGL thread.
+        ui_settings_set_scale_info(reading.connected, SCALE_URL,
+                                   reading.calibrationValid, reading.calibration);
         char weightText[32];
         if (reading.connected)
             snprintf(weightText, sizeof(weightText), "%.0f g", reading.grams);

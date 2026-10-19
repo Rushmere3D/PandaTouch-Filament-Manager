@@ -96,6 +96,33 @@ static void ui_settings_off_timeout_cb(lv_event_t *e)
     if (selected < 5) pt_screen_set_off_timeout_minutes(minutes[selected]);
 }
 
+// Stage 6A: read-only scale diagnostics, updated from the UI thread.
+static lv_obj_t *ui_settings_scale_status = nullptr;
+static lv_obj_t *ui_settings_scale_address = nullptr;
+static lv_obj_t *ui_settings_scale_factor = nullptr;
+
+inline void ui_settings_set_scale_info(bool connected, const char *weightUrl,
+                                       bool factorValid, float factor)
+{
+    if (!ui_settings_scale_status) return;
+    lv_label_set_text(ui_settings_scale_status,
+                      connected ? "Status: Connected" : "Status: Disconnected");
+    if (weightUrl && ui_settings_scale_address)
+        lv_label_set_text_fmt(ui_settings_scale_address, "Weight API: %s", weightUrl);
+    if (ui_settings_scale_factor)
+    {
+        if (connected && factorValid)
+            {
+                char calibrationText[80];
+                snprintf(calibrationText, sizeof(calibrationText),
+                         "Calibration: %.4f counts/g", (double)factor);
+                lv_label_set_text(ui_settings_scale_factor, calibrationText);
+            }
+        else
+            lv_label_set_text(ui_settings_scale_factor, "Calibration: Unavailable");
+    }
+}
+
 inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
 {
     lv_obj_t *page = lv_obj_create(parent);
@@ -214,5 +241,42 @@ inline lv_obj_t *ui_settings_create(lv_obj_t *parent)
     lv_obj_add_event_cb(dim_brightness_slider, ui_settings_dim_brightness_cb,
                         LV_EVENT_VALUE_CHANGED, dim_brightness_label);
 
+    // Stage 6A: scale information below existing display settings.
+    // Allow vertical scrolling so existing controls keep their tested positions.
+    lv_obj_add_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(page, LV_DIR_VER);
+    lv_obj_t *scale_heading = lv_label_create(page);
+    lv_label_set_text(scale_heading, "Scale connection (Stage 6A)");
+    lv_obj_set_style_text_color(scale_heading, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_pos(scale_heading, 20, 282);
+
+    ui_settings_scale_status = lv_label_create(page);
+    lv_label_set_text(ui_settings_scale_status, "Status: Waiting for scale");
+    lv_obj_set_style_text_color(ui_settings_scale_status, lv_color_hex(0xB0B8C0), LV_PART_MAIN);
+    lv_obj_set_pos(ui_settings_scale_status, 20, 313);
+
+    ui_settings_scale_address = lv_label_create(page);
+    lv_label_set_text(ui_settings_scale_address, "Weight API: --");
+    lv_obj_set_width(ui_settings_scale_address, 720);
+    lv_label_set_long_mode(ui_settings_scale_address, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_color(ui_settings_scale_address, lv_color_hex(0xB0B8C0), LV_PART_MAIN);
+    lv_obj_set_pos(ui_settings_scale_address, 20, 340);
+
+    ui_settings_scale_factor = lv_label_create(page);
+    lv_label_set_text(ui_settings_scale_factor, "Calibration: Unavailable");
+    lv_obj_set_style_text_color(ui_settings_scale_factor, lv_color_hex(0xB0B8C0), LV_PART_MAIN);
+    lv_obj_set_pos(ui_settings_scale_factor, 20, 368);
+
+    lv_obj_t *firmware = lv_label_create(page);
+    lv_label_set_text(firmware, "Scale firmware: Not reported by current API");
+    lv_obj_set_style_text_color(firmware, lv_color_hex(0xB0B8C0), LV_PART_MAIN);
+    lv_obj_set_pos(firmware, 20, 395);
+
+    // Extends scrollable content beyond the visible 310px settings viewport.
+    lv_obj_t *bottom = lv_obj_create(page);
+    lv_obj_set_size(bottom, 1, 1);
+    lv_obj_set_pos(bottom, 20, 435);
+    lv_obj_set_style_bg_opa(bottom, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(bottom, 0, LV_PART_MAIN);
     return page;
 }
