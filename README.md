@@ -10,63 +10,55 @@ Working on hardware
 
 **Spoolman inventory**
 
-• Connects to Wi-Fi and retrieves filament inventory from a Spoolman server.
-
-• Displays spool vendor, material, name, remaining weight and colour.
-
-• Supports single-colour, transparent and multi-colour spool swatches.
-
-• Searches inventory by vendor, filament name, material or Spoolman spool ID.
-
-• Paginates inventory four spools at a time, with first, previous, next and last controls.
-
-• Opens a detail view showing remaining weight, initial weight, empty-spool weight, location and Spoolman ID.
-
-• Provides a compact refresh icon for manual inventory synchronisation.
-
-• Automatically refreshes inventory approximately every 60 seconds, without blocking touchscreen interaction.
-
-• Retains the existing inventory if refresh fails, and preserves the search, page and selected spool across refreshes.
+- Connects to Wi-Fi and retrieves filament inventory from a Spoolman server.
+- Displays spool vendor, material, name, remaining weight and colour.
+- Supports single-colour, transparent and multi-colour spool swatches.
+- Searches inventory by vendor, filament name, material or Spoolman spool ID.
+- Paginates inventory four spools at a time, with first, previous, next and last controls.
+- Opens a detail view showing remaining weight, initial weight, empty-spool weight, location and Spoolman ID.
+- Provides a compact refresh icon for manual inventory synchronisation.
+- Automatically refreshes inventory approximately every 60 seconds, without blocking touchscreen interaction.
+- Retains the existing inventory if refresh fails, and preserves the search, page and selected spool across refreshes.
 
 **Wi-Fi filament scale**
 
-• Receives live gross-weight readings from a separate ESP32 controller connected to an HX711 and load cell.
-• Offers TARE from the Panda Touch using the scale’s HTTP API.
-• Selects an inventory item using USE ON SCALE and calculates filament remaining from gross weight minus the spool’s recorded empty weight.
-• Compares the measured filament weight against the value recorded in Spoolman.
-• Detects stable weight readings over a two-second window, using raw measurements and a ±1 g tolerance (up to 2 g total range).
-• Shows STABLE / STABILISING feedback and prevents Spoolman updates until the measurement is stable.
-• Requires confirmation before updating Spoolman, then verifies the saved remaining weight with a follow-up API request.
-• Refreshes local spool information after a verified successful update.
-• Handles disconnected scale readings and blocks updates when the required empty-spool weight is unavailable or the calculated result is invalid.
+- Receives live gross-weight readings from a separate ESP32 controller connected to an HX711 and load cell.
+- Offers TARE from the Panda Touch using the scale’s HTTP API.
+- Selects an inventory item using USE ON SCALE and calculates filament remaining from gross weight minus the spool’s recorded empty weight.
+- Compares the measured filament weight against the value recorded in Spoolman.
+- Detects stable weight readings over a two-second window, using raw measurements and a ±1 g tolerance (up to 2 g total range).
+- Shows STABLE / STABILISING feedback and prevents Spoolman updates until the measurement is stable.
+- Requires confirmation before updating Spoolman, then verifies the saved remaining weight with a follow-up API request.
+- Refreshes local spool information after a verified successful update.
+- Handles disconnected scale readings and blocks updates when the required empty-spool weight is unavailable or the calculated result is invalid.
 
 Interface and diagnostics
 
-• Spools, Scale and Settings pages with touchscreen navigation.
-• Display brightness control and Wi-Fi status.
-• Serial diagnostics for display, network, inventory and scale operations.
+- Spools, Scale and Settings pages with touchscreen navigation.
+- Display brightness control and Wi-Fi status.
+- Serial diagnostics for display, network, inventory and scale operations.
 
 Planned / in development
 
-• Remote scale calibration controls and scale connection information on the Settings page (Stage 6).
-• Improved device/network configuration without editing firmware source.
-• Further UI refinement, resilience testing and packaging for wider use.
+- Remote scale calibration controls and scale connection information on the Settings page (Stage 6).
+- Improved device/network configuration without editing firmware source.
+- Further UI refinement, resilience testing and packaging for wider use.
 
 Hardware
 
 Touchscreen controller
 
-• BIGTREETECH Panda Touch V1.0 with ESP32-S3.
-• Built-in 800 × 480 RGB LCD and GT911 capacitive touchscreen.
-• 2.4 GHz Wi-Fi access to a reachable Spoolman server and the scale controller.
+- BIGTREETECH Panda Touch V1.0 with ESP32-S3.
+- Built-in 800 × 480 RGB LCD and GT911 capacitive touchscreen.
+- 2.4 GHz Wi-Fi access to a reachable Spoolman server and the scale controller.
 
 ESP32 Filament Scale firmware
 
-• ESP32-WROOM-32 development board.
-• HX711 load-cell amplifier and a suitable load cell.
-• HX711 DOUT → GPIO16, SCK → GPIO17 on the scale ESP32 in the tested setup.
-• The scale runs its own firmware and exposes weight and tare endpoints over Wi-Fi.
-• Calibration is stored on the scale controller, not on the Panda Touch.
+- ESP32-WROOM-32 development board.
+- HX711 load-cell amplifier and a suitable load cell.
+- HX711 DOUT → GPIO16, SCK → GPIO17 on the scale ESP32 in the tested setup.
+- The scale runs its own firmware and exposes weight and tare endpoints over Wi-Fi.
+- Calibration is stored on the scale controller, not on the Panda Touch.
 
 The filament scale is a separate ESP32-based device that communicates with Panda Touch Filament Manager over Wi-Fi.
 
@@ -99,13 +91,13 @@ This is a custom firmware project, not the stock Panda Touch firmware. Flashing 
 
 Software stack
 
-• PlatformIO in Visual Studio Code
-• ESP32 Arduino framework (tested Panda Touch environment: pandatouch)
-• LVGL 9.3.0
-• TAMC_GT911
-• Arduino_GFX
-• ArduinoJson
-• HTTP-based communication with Spoolman and the scale ESP32
+- PlatformIO in Visual Studio Code
+- ESP32 Arduino framework (tested Panda Touch environment: pandatouch)
+- LVGL 9.3.0
+- TAMC_GT911
+- Arduino_GFX
+- ArduinoJson
+- HTTP-based communication with Spoolman and the scale ESP32
 
 The project uses the pandatouch PlatformIO environment for development and hardware testing. Other environments in platformio.ini, if present, should not be assumed to have been validated with this application.
 
@@ -177,20 +169,20 @@ Settings: Includes device settings such as display brightness and Wi-Fi informat
 
 Weight update safeguards
 
-• A successful scale connection alone is not sufficient: the weight must also be stable.
-• Stability is evaluated from raw readings over a two-second window, not from the rounded on-screen weight.
-• The displayed weight and Spoolman update are rounded to whole grams.
-• Invalid calculations and missing empty-spool weights prevent an update.
-• The firmware requires user confirmation and verifies the Spoolman API result.
-• Inventory refresh and weight-writing operations are coordinated to avoid running simultaneously.
+- A successful scale connection alone is not sufficient: the weight must also be stable.
+- Stability is evaluated from raw readings over a two-second window, not from the rounded on-screen weight.
+- The displayed weight and Spoolman update are rounded to whole grams.
+- Invalid calculations and missing empty-spool weights prevent an update.
+- The firmware requires user confirmation and verifies the Spoolman API result.
+- Inventory refresh and weight-writing operations are coordinated to avoid running simultaneously.
 
 Current limitations
 
-• Calibration from Panda Touch is not yet implemented. The scale must already be calibrated using its own firmware/workflow.
-• Two-device setup: live weighing requires a separate powered, network-connected ESP32/HX711 scale.
-• Wi-Fi, Spoolman and scale addresses may require editing source/configuration files before building.
-• Spoolman inventory is held in device memory; automatic synchronisation is periodic, not instant push notification.
-• The project is under active development and is not yet a production-ready firmware release.
+- Calibration from Panda Touch is not yet implemented. The scale must already be calibrated using its own firmware/workflow.
+- Two-device setup: live weighing requires a separate powered, network-connected ESP32/HX711 scale.
+- Wi-Fi, Spoolman and scale addresses may require editing source/configuration files before building.
+- Spoolman inventory is held in device memory; automatic synchronisation is periodic, not instant push notification.
+- The project is under active development and is not yet a production-ready firmware release.
 
 Display tearing and rendering
 
@@ -234,19 +226,19 @@ Development milestones
 
 Credits and acknowledgements
 
-• BIGTREETECH for the Panda Touch hardware and original PandaTouch PlatformIO template on which this firmware is based.
-• Spoolman for the filament inventory management server and API.
-• The maintainers and contributors of LVGL, Arduino_GFX, TAMC_GT911, ArduinoJson, PlatformIO and the ESP32 Arduino ecosystem.
+- BIGTREETECH for the Panda Touch hardware and original PandaTouch PlatformIO template on which this firmware is based.
+- Spoolman for the filament inventory management server and API.
+- The maintainers and contributors of LVGL, Arduino_GFX, TAMC_GT911, ArduinoJson, PlatformIO and the ESP32 Arduino ecosystem.
 
 This is an independent community project and is not an official BIGTREETECH or Spoolman firmware release. Refer to the repository’s included licence and upstream dependency licences for applicable terms.
 
 Useful references
 
-• Panda Touch documentation
-• Original PandaTouch PlatformIO project
-• PandaTouch ESP-IDF project
-• Spoolman
-• LVGL documentation
-• PlatformIO documentation
-• Pinout reference
-• LCD datasheet
+- Panda Touch documentation
+- Original PandaTouch PlatformIO project
+- PandaTouch ESP-IDF project
+- Spoolman
+- LVGL documentation
+- PlatformIO documentation
+- Pinout reference
+- LCD datasheet
